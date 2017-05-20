@@ -8,7 +8,7 @@ import com.faforever.client.game.Game;
 import com.faforever.client.game.GameService;
 import com.faforever.client.player.event.FriendJoinedGameEvent;
 import com.faforever.client.remote.FafService;
-import com.faforever.client.remote.domain.GameState;
+import com.faforever.client.remote.domain.GameStatus;
 import com.faforever.client.remote.domain.PlayersMessage;
 import com.faforever.client.remote.domain.SocialMessage;
 import com.faforever.client.user.UserService;
@@ -30,10 +30,13 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static com.faforever.client.chat.SocialStatus.FOE;
 import static com.faforever.client.chat.SocialStatus.FRIEND;
@@ -46,6 +49,7 @@ public class PlayerServiceImpl implements PlayerService {
 
   private final ObservableMap<String, Player> playersByName;
   private final ObservableMap<Integer, Player> playersById;
+  private final ObservableMap<Player, Game> gamesByPlayers;
   private final List<Integer> foeList;
   private final List<Integer> friendList;
   private final ObjectProperty<Player> currentPlayer;
@@ -66,6 +70,7 @@ public class PlayerServiceImpl implements PlayerService {
 
     playersByName = FXCollections.observableHashMap();
     playersById = FXCollections.observableHashMap();
+    gamesByPlayers = FXCollections.observableHashMap();
     friendList = new ArrayList<>();
     foeList = new ArrayList<>();
     currentPlayer = new SimpleObjectProperty<>();
@@ -102,7 +107,7 @@ public class PlayerServiceImpl implements PlayerService {
 
   @Subscribe
   public void onAvatarChanged(AvatarChangedEvent event) {
-    Player player = getCurrentPlayer();
+    Player player = getCurrentPlayer().orElseThrow(() -> new IllegalStateException("Player has not been set"));
 
     AvatarBean avatar = event.getAvatar();
     if (avatar == null) {
@@ -127,6 +132,21 @@ public class PlayerServiceImpl implements PlayerService {
     ObservableMap<String, List<String>> teams = game.getTeams();
     synchronized (teams) {
       teams.forEach((team, players) -> updateGamePlayers(players, game));
+
+      List<Player> leftGame = new LinkedList<>();
+      synchronized (gamesByPlayers) {
+        gamesByPlayers.forEach((player, g) -> {
+          if (g == game
+              && game.getTeams().entrySet().stream()
+              .flatMap(team -> team.getValue().stream())
+              .filter(Objects::nonNull)
+              .noneMatch(s -> s.equals(player.getUsername()))) {
+            player.setGame(null);
+            leftGame.add(player);
+          }
+        });
+        leftGame.forEach(gamesByPlayers::remove);
+      }
     }
   }
 
@@ -137,14 +157,21 @@ public class PlayerServiceImpl implements PlayerService {
         .forEach(player -> {
           resetIdleTime(player);
           player.setGame(game);
-          if (game == null) {
-            return;
+
+          synchronized (gamesByPlayers) {
+            if (gamesByPlayers.containsKey(player) && gamesByPlayers.get(player) != game) {
+              gamesByPlayers.remove(player);
+            }
+            if (!gamesByPlayers.containsKey(player)) {
+              gamesByPlayers.put(player, game);
+            }
           }
-          GameState gameState = game.getStatus();
+          GameStatus gameStatus = game.getStatus();
           if (player.getSocialStatus() == FRIEND) {
-            if (gameState == GameState.OPEN) {
+            if (gameStatus == GameStatus.OPEN) {
               eventBus.post(new FriendJoinedGameEvent(player));
-            } else if (gameState == GameState.PLAYING) {
+            } else if (gameStatus == GameStatus.PLAYING) {
+              // TODO implement
 //              eventBus.post(new FriendPlaysGameEvent(player));
             }
           }
@@ -152,8 +179,18 @@ public class PlayerServiceImpl implements PlayerService {
   }
 
   @Override
+  public boolean isOnline(Integer playerId) {
+    return playersById.containsKey(playerId);
+  }
+
+  @Override
   public Player getPlayerForUsername(String username) {
     return playersByName.get(username);
+  }
+
+  @Override
+  public Optional<Player> getPlayerForId(int id) {
+    return Optional.ofNullable(playersById.get(id));
   }
 
   @Override
@@ -216,9 +253,8 @@ public class PlayerServiceImpl implements PlayerService {
   }
 
   @Override
-  public Player getCurrentPlayer() {
-    Assert.checkNullIllegalState(currentPlayer.get(), "currentPlayer has not yet been set");
-    return currentPlayer.get();
+  public Optional<Player> getCurrentPlayer() {
+    return Optional.ofNullable(currentPlayer.get());
   }
 
   @Override
@@ -226,13 +262,18 @@ public class PlayerServiceImpl implements PlayerService {
     return currentPlayer;
   }
 
+  @Override
+  public CompletableFuture<List<Player>> getPlayersByIds(Collection<Integer> playerIds) {
+    return fafService.getPlayersByIds(playerIds);
+  }
+
   private void onPlayersInfo(PlayersMessage playersMessage) {
     playersMessage.getPlayers().forEach(this::onPlayerInfo);
   }
 
   private void onFoeList(SocialMessage socialMessage) {
-    onFoeList(socialMessage.getFoes());
-    onFriendList(socialMessage.getFriends());
+    Optional.ofNullable(socialMessage.getFoes()).ifPresent(this::onFoeList);
+    Optional.ofNullable(socialMessage.getFriends()).ifPresent(this::onFriendList);
   }
 
   private void onFoeList(List<Integer> foes) {
@@ -259,7 +300,7 @@ public class PlayerServiceImpl implements PlayerService {
 
   private void onPlayerInfo(com.faforever.client.remote.domain.Player player) {
     if (player.getLogin().equalsIgnoreCase(userService.getUsername())) {
-      Player playerInfoBean = getCurrentPlayer();
+      Player playerInfoBean = getCurrentPlayer().orElseThrow(() -> new IllegalStateException("Player has not been set"));
       playerInfoBean.updateFromPlayerInfo(player);
       playerInfoBean.setSocialStatus(SELF);
     } else {

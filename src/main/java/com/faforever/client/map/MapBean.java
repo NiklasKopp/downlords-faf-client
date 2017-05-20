@@ -1,5 +1,7 @@
 package com.faforever.client.map;
 
+import com.faforever.client.api.dto.MapVersion;
+import com.faforever.client.api.dto.Review;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleFloatProperty;
@@ -7,6 +9,7 @@ import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
+import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.jetbrains.annotations.NotNull;
 
 import java.net.URL;
@@ -24,7 +27,7 @@ public class MapBean implements Comparable<MapBean> {
   private final IntegerProperty downloads;
   private final IntegerProperty players;
   private final ObjectProperty<MapSize> size;
-  private final IntegerProperty version;
+  private final ObjectProperty<ComparableVersion> version;
   private final StringProperty id;
   private final StringProperty author;
   private final ObjectProperty<URL> downloadUrl;
@@ -43,7 +46,7 @@ public class MapBean implements Comparable<MapBean> {
     this.rating = new SimpleFloatProperty();
     this.players = new SimpleIntegerProperty();
     this.size = new SimpleObjectProperty<>();
-    this.version = new SimpleIntegerProperty();
+    this.version = new SimpleObjectProperty<>();
     this.smallThumbnailUrl = new SimpleObjectProperty<>();
     this.largeThumbnailUrl = new SimpleObjectProperty<>();
     this.downloadUrl = new SimpleObjectProperty<>();
@@ -52,21 +55,41 @@ public class MapBean implements Comparable<MapBean> {
     this.type = new SimpleObjectProperty<>();
   }
 
-  public static MapBean fromMap(com.faforever.client.api.Map map) {
+  public static MapBean fromMap(com.faforever.client.api.dto.Map map) {
+    MapVersion mapVersion = map.getLatestVersion();
+    
     MapBean mapBean = new MapBean();
-    mapBean.setDescription(map.getDescription());
+    mapBean.setDescription(mapVersion.getDescription());
     mapBean.setDisplayName(map.getDisplayName());
-    mapBean.setFolderName(map.getFolderName());
-    mapBean.setSize(new MapSize(map.getSizeX(), map.getSizeY()));
-    mapBean.setDownloads(map.getDownloads());
-    mapBean.setId(map.getId());
-    mapBean.setPlayers(map.getMaxPlayers());
-    mapBean.setRating(map.getRating());
-    mapBean.setVersion(map.getVersion());
-    mapBean.setDownloadUrl(map.getDownloadUrl());
-    mapBean.setSmallThumbnailUrl(map.getThumbnailUrlSmall());
-    mapBean.setLargeThumbnailUrl(map.getThumbnailUrlLarge());
-    mapBean.setCreateTime(map.getCreateTime());
+    mapBean.setFolderName(mapVersion.getFolderName());
+    mapBean.setSize(new MapSize(mapVersion.getWidth(), mapVersion.getHeight()));
+    mapBean.setDownloads(map.getStatistics().getDownloads());
+    mapBean.setId(mapVersion.getId());
+    mapBean.setPlayers(mapVersion.getMaxPlayers());
+    mapBean.setRating((float) mapVersion.getReviews().stream().mapToInt(Review::getScore).average().orElse(0d));
+    mapBean.setVersion(mapVersion.getVersion());
+    mapBean.setDownloadUrl(mapVersion.getDownloadUrl());
+    mapBean.setSmallThumbnailUrl(mapVersion.getThumbnailUrlSmall());
+    mapBean.setLargeThumbnailUrl(mapVersion.getThumbnailUrlLarge());
+    mapBean.setCreateTime(mapVersion.getCreateTime().toLocalDateTime());
+    return mapBean;
+  }
+
+  public static MapBean fromMap(com.faforever.client.api.dto.MapVersion mapVersion) {
+    MapBean mapBean = new MapBean();
+    mapBean.setDescription(mapVersion.getDescription());
+    mapBean.setDisplayName(mapVersion.getMap().getDisplayName());
+    mapBean.setFolderName(mapVersion.getFolderName());
+    mapBean.setSize(new MapSize(mapVersion.getWidth(), mapVersion.getHeight()));
+    mapBean.setDownloads(mapVersion.getMap().getStatistics().getDownloads());
+    mapBean.setId(mapVersion.getId());
+    mapBean.setPlayers(mapVersion.getMaxPlayers());
+    mapBean.setRating((float) mapVersion.getReviews().stream().mapToInt(Review::getScore).average().orElse(0d));
+    mapBean.setVersion(mapVersion.getVersion());
+    mapBean.setDownloadUrl(mapVersion.getDownloadUrl());
+    mapBean.setSmallThumbnailUrl(mapVersion.getThumbnailUrlSmall());
+    mapBean.setLargeThumbnailUrl(mapVersion.getThumbnailUrlLarge());
+    mapBean.setCreateTime(mapVersion.getCreateTime().toLocalDateTime());
     return mapBean;
   }
 
@@ -170,15 +193,15 @@ public class MapBean implements Comparable<MapBean> {
     return players;
   }
 
-  public int getVersion() {
+  public ComparableVersion getVersion() {
     return version.get();
   }
 
-  public void setVersion(int version) {
+  public void setVersion(ComparableVersion version) {
     this.version.set(version);
   }
 
-  public IntegerProperty versionProperty() {
+  public ObjectProperty<ComparableVersion> versionProperty() {
     return version;
   }
 

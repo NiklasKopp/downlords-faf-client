@@ -8,7 +8,7 @@ import com.faforever.client.map.MapBean;
 import com.faforever.client.map.MapService;
 import com.faforever.client.map.MapServiceImpl.PreviewSize;
 import com.faforever.client.map.MapSize;
-import com.faforever.client.mod.FeaturedModBean;
+import com.faforever.client.mod.FeaturedMod;
 import com.faforever.client.mod.Mod;
 import com.faforever.client.mod.ModService;
 import com.faforever.client.notification.ImmediateNotification;
@@ -83,7 +83,7 @@ public class CreateGameController implements Controller<Pane> {
   public TextField passwordTextField;
   public TextField minRankingTextField;
   public TextField maxRankingTextField;
-  public ListView<FeaturedModBean> featuredModListView;
+  public ListView<FeaturedMod> featuredModListView;
   public ListView<MapBean> mapListView;
   public Pane createGameRoot;
   public Button createGameButton;
@@ -137,13 +137,13 @@ public class CreateGameController implements Controller<Pane> {
       mapListView.scrollTo(newMapIndex);
     });
 
-    featuredModListView.setCellFactory(param -> new StringListCell<>(FeaturedModBean::getDisplayName));
+    featuredModListView.setCellFactory(param -> new StringListCell<>(FeaturedMod::getDisplayName));
 
     JavaFxUtil.makeNumericTextField(minRankingTextField, MAX_RATING_LENGTH);
     JavaFxUtil.makeNumericTextField(maxRankingTextField, MAX_RATING_LENGTH);
 
     modService.getFeaturedMods().thenAccept(featuredModBeans -> Platform.runLater(() -> {
-      featuredModListView.setItems(FXCollections.observableList(featuredModBeans).filtered(FeaturedModBean::isVisible));
+      featuredModListView.setItems(FXCollections.observableList(featuredModBeans).filtered(FeaturedMod::isVisible));
       selectLastOrDefaultGameType();
     }));
 
@@ -236,7 +236,7 @@ public class CreateGameController implements Controller<Pane> {
     mapNameLabel.setText(newValue.getDisplayName());
     mapPlayersLabel.setText(i18n.number(newValue.getPlayers()));
     mapDescriptionLabel.setText(newValue.getDescription());
-    versionLabel.setText(i18n.number(newValue.getVersion()));
+    versionLabel.setText(newValue.getVersion().toString());
   }
 
   private void initFeaturedModList() {
@@ -305,10 +305,10 @@ public class CreateGameController implements Controller<Pane> {
   private void selectLastOrDefaultGameType() {
     String lastGameMod = preferencesService.getPreferences().getLastGameType();
     if (lastGameMod == null) {
-      lastGameMod = KnownFeaturedMod.DEFAULT.getString();
+      lastGameMod = KnownFeaturedMod.DEFAULT.getTechnicalName();
     }
 
-    for (FeaturedModBean mod : featuredModListView.getItems()) {
+    for (FeaturedMod mod : featuredModListView.getItems()) {
       if (Objects.equals(mod.getTechnicalName(), lastGameMod)) {
         featuredModListView.getSelectionModel().select(mod);
         featuredModListView.scrollTo(mod);

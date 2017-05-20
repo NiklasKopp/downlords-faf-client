@@ -1,8 +1,10 @@
 package com.faforever.client.game;
 
-import com.faforever.client.remote.domain.GameState;
+import com.faforever.client.remote.domain.GameStatus;
 import com.faforever.client.remote.domain.VictoryCondition;
 import javafx.collections.FXCollections;
+
+import java.time.Instant;
 
 public class GameBuilder {
 
@@ -17,7 +19,7 @@ public class GameBuilder {
   }
 
   public GameBuilder defaultValues() {
-    game.setFeaturedMod(KnownFeaturedMod.DEFAULT.getString());
+    game.setFeaturedMod(KnownFeaturedMod.DEFAULT.getTechnicalName());
     game.setFeaturedModVersions(FXCollections.emptyObservableMap());
     game.setVictoryCondition(VictoryCondition.DEMORALIZATION);
     game.setHost("Host");
@@ -25,12 +27,13 @@ public class GameBuilder {
     game.setNumPlayers(1);
     game.setNumPlayers(2);
     game.setSimMods(FXCollections.emptyObservableMap());
-    game.setStatus(GameState.OPEN);
+    game.setStatus(GameStatus.OPEN);
     game.setTitle("Title");
     game.setTeams(FXCollections.emptyObservableMap());
     game.setId(1);
     game.setMaxRating(800);
     game.setMaxRating(1300);
+    game.setStartTime(Instant.now());
     return this;
   }
 
@@ -48,7 +51,7 @@ public class GameBuilder {
     return this;
   }
 
-  public GameBuilder state(GameState state) {
+  public GameBuilder state(GameStatus state) {
     game.setStatus(state);
     return this;
   }

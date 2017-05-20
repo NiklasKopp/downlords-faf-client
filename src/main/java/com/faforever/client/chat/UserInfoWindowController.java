@@ -3,14 +3,14 @@ package com.faforever.client.chat;
 import com.faforever.client.achievements.AchievementItemController;
 import com.faforever.client.achievements.AchievementService;
 import com.faforever.client.achievements.AchievementService.AchievementState;
-import com.faforever.client.api.AchievementDefinition;
-import com.faforever.client.api.PlayerAchievement;
-import com.faforever.client.api.PlayerEvent;
-import com.faforever.client.api.RatingType;
+import com.faforever.client.api.dto.AchievementDefinition;
+import com.faforever.client.api.dto.PlayerAchievement;
+import com.faforever.client.api.dto.PlayerEvent;
 import com.faforever.client.domain.RatingHistoryDataPoint;
 import com.faforever.client.events.EventService;
 import com.faforever.client.fx.Controller;
 import com.faforever.client.fx.WindowController;
+import com.faforever.client.game.KnownFeaturedMod;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.player.Player;
 import com.faforever.client.preferences.PreferencesService;
@@ -43,21 +43,19 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.stage.Window;
 import javafx.util.StringConverter;
+import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import javax.inject.Inject;
-import java.lang.invoke.MethodHandles;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.faforever.client.achievements.AchievementService.AchievementState.UNLOCKED;
@@ -72,7 +70,7 @@ import static com.faforever.client.events.EventService.EVENT_BUILT_TECH_3_UNITS;
 import static com.faforever.client.events.EventService.EVENT_CUSTOM_GAMES_PLAYED;
 import static com.faforever.client.events.EventService.EVENT_CYBRAN_PLAYS;
 import static com.faforever.client.events.EventService.EVENT_CYBRAN_WINS;
-import static com.faforever.client.events.EventService.EVENT_RANKED_1V1_GAMES_PLAYED;
+import static com.faforever.client.events.EventService.EVENT_LADDER_1V1_GAMES_PLAYED;
 import static com.faforever.client.events.EventService.EVENT_SERAPHIM_PLAYS;
 import static com.faforever.client.events.EventService.EVENT_SERAPHIM_WINS;
 import static com.faforever.client.events.EventService.EVENT_UEF_PLAYS;
@@ -82,11 +80,11 @@ import static javafx.collections.FXCollections.observableList;
 
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Component
+@Slf4j
 public class UserInfoWindowController implements Controller<Node> {
 
   private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("d MMM");
 
-  private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
   private final StatisticsService statisticsService;
   private final CountryFlagService countryFlagService;
   private final AchievementService achievementService;
@@ -128,7 +126,9 @@ public class UserInfoWindowController implements Controller<Node> {
   private Window ownerWindow;
 
   @Inject
-  public UserInfoWindowController(StatisticsService statisticsService, CountryFlagService countryFlagService, AchievementService achievementService, EventService eventService, PreferencesService preferencesService, I18n i18n, UiService uiService) {
+  public UserInfoWindowController(StatisticsService statisticsService, CountryFlagService countryFlagService,
+                                  AchievementService achievementService, EventService eventService,
+                                  PreferencesService preferencesService, I18n i18n, UiService uiService) {
     this.statisticsService = statisticsService;
     this.countryFlagService = countryFlagService;
     this.achievementService = achievementService;
@@ -184,7 +184,7 @@ public class UserInfoWindowController implements Controller<Node> {
     return userInfoRoot;
   }
 
-  private void displayAvailableAchievements(List<AchievementDefinition> achievementDefinitions) {
+  private void setAvailableAchievements(List<AchievementDefinition> achievementDefinitions) {
     ObservableList<Node> children = lockedAchievementsContainer.getChildren();
     Platform.runLater(children::clear);
 
@@ -201,7 +201,7 @@ public class UserInfoWindowController implements Controller<Node> {
     this.player = player;
 
     usernameLabel.setText(player.getUsername());
-    countryImageView.setImage(countryFlagService.loadCountryFlag(player.getCountry()));
+    countryFlagService.loadCountryFlag(player.getCountry()).ifPresent(image -> countryImageView.setImage(image));
     avatarImageView.setImage(IdenticonUtil.createIdenticon(player.getId()));
     gamesPlayedLabel.setText(i18n.number(player.getNumberOfGames()));
     ratingLabelGlobal.setText(i18n.number(RatingUtil.getGlobalRating(player)));
@@ -219,12 +219,17 @@ public class UserInfoWindowController implements Controller<Node> {
     globalButton.setSelected(true);
 
     loadAchievements();
-    eventService.getPlayerEvents(player.getUsername()).thenAccept(events -> {
-      plotFactionsChart(events);
-      plotUnitsByCategoriesChart(events);
-      plotTechBuiltChart(events);
-      plotGamesPlayedChart(events);
-    });
+    eventService.getPlayerEvents(player.getId())
+        .thenAccept(events -> {
+          plotFactionsChart(events);
+          plotUnitsByCategoriesChart(events);
+          plotTechBuiltChart(events);
+          plotGamesPlayedChart(events);
+        })
+        .exceptionally(throwable -> {
+          log.warn("Could not load player events", throwable);
+          return null;
+        });
   }
 
   private void loadAchievements() {
@@ -232,18 +237,18 @@ public class UserInfoWindowController implements Controller<Node> {
     achievementService.getAchievementDefinitions()
         .exceptionally(throwable -> {
           // TODO display to user
-          logger.warn("Could not display achievement definitions", throwable);
+          log.warn("Could not display achievement definitions", throwable);
           return Collections.emptyList();
         })
-        .thenAccept(this::displayAvailableAchievements)
-        .thenCompose(aVoid -> achievementService.getPlayerAchievements(player.getUsername()))
+        .thenAccept(this::setAvailableAchievements)
+        .thenCompose(aVoid -> achievementService.getPlayerAchievements(player.getId()))
         .thenAccept(playerAchievements -> {
           updatePlayerAchievements(playerAchievements);
           enterAchievementsLoadedState();
         })
         .exceptionally(throwable -> {
           // TODO tell the user
-          logger.warn("Player achievements could not be loaded", throwable);
+          log.warn("Player achievements could not be loaded", throwable);
           return null;
         });
   }
@@ -306,7 +311,7 @@ public class UserInfoWindowController implements Controller<Node> {
   @SuppressWarnings("unchecked")
   private void plotGamesPlayedChart(Map<String, PlayerEvent> playerEvents) {
     int tech1Built = playerEvents.containsKey(EVENT_CUSTOM_GAMES_PLAYED) ? playerEvents.get(EVENT_CUSTOM_GAMES_PLAYED).getCount() : 0;
-    int tech2Built = playerEvents.containsKey(EVENT_RANKED_1V1_GAMES_PLAYED) ? playerEvents.get(EVENT_RANKED_1V1_GAMES_PLAYED).getCount() : 0;
+    int tech2Built = playerEvents.containsKey(EVENT_LADDER_1V1_GAMES_PLAYED) ? playerEvents.get(EVENT_LADDER_1V1_GAMES_PLAYED).getCount() : 0;
 
     Platform.runLater(() -> gamesPlayedChart.setData(FXCollections.observableArrayList(
         new PieChart.Data(i18n.get("stats.custom"), tech1Built),
@@ -326,7 +331,7 @@ public class UserInfoWindowController implements Controller<Node> {
     Platform.runLater(children::clear);
 
     for (PlayerAchievement playerAchievement : playerAchievements) {
-      AchievementItemController achievementItemController = achievementItemById.get(playerAchievement.getAchievementId());
+      AchievementItemController achievementItemController = achievementItemById.get(playerAchievement.getAchievement().getId());
       achievementItemController.setPlayerAchievement(playerAchievement);
 
       if (isUnlocked(playerAchievement)) {
@@ -342,7 +347,10 @@ public class UserInfoWindowController implements Controller<Node> {
       mostRecentAchievementPane.setVisible(false);
     } else {
       mostRecentAchievementPane.setVisible(true);
-      AchievementDefinition mostRecentAchievement = achievementDefinitionById.get(mostRecentPlayerAchievement.getAchievementId());
+      AchievementDefinition mostRecentAchievement = achievementDefinitionById.get(mostRecentPlayerAchievement.getAchievement().getId());
+      if (mostRecentAchievement == null) {
+        return;
+      }
       String mostRecentAchievementName = mostRecentAchievement.getName();
       String mostRecentAchievementDescription = mostRecentAchievement.getDescription();
 
@@ -360,15 +368,15 @@ public class UserInfoWindowController implements Controller<Node> {
   }
 
   public void ladder1v1ButtonClicked() {
-    loadStatistics(RatingType.LADDER_1V1);
+    loadStatistics(KnownFeaturedMod.LADDER_1V1);
   }
 
-  private CompletionStage<Void> loadStatistics(RatingType type) {
-    return statisticsService.getRatingHistory(type, player.getId())
+  private CompletableFuture<Void> loadStatistics(KnownFeaturedMod featuredMod) {
+    return statisticsService.getRatingHistory(featuredMod, player.getId())
         .thenAccept(ratingHistory -> Platform.runLater(() -> plotPlayerRatingGraph(ratingHistory)))
         .exceptionally(throwable -> {
           // FIXME display to user
-          logger.warn("Statistics could not be loaded", throwable);
+          log.warn("Statistics could not be loaded", throwable);
           return null;
         });
   }
@@ -394,7 +402,7 @@ public class UserInfoWindowController implements Controller<Node> {
         int number = object.intValue();
         int numberOfDataPoints = dataPoints.size();
         int dataPointIndex = number >= numberOfDataPoints ? numberOfDataPoints - 1 : number;
-        return DATE_FORMATTER.format(dataPoints.get(dataPointIndex).getDateTime());
+        return DATE_FORMATTER.format(dataPoints.get(dataPointIndex).getInstant());
       }
 
       @Override
@@ -405,7 +413,7 @@ public class UserInfoWindowController implements Controller<Node> {
   }
 
   public void globalButtonClicked() {
-    loadStatistics(RatingType.GLOBAL);
+    loadStatistics(KnownFeaturedMod.FAF);
   }
 
   public void show() {

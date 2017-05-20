@@ -1,6 +1,9 @@
 package com.faforever.client.chat;
 
 import com.faforever.client.audio.AudioService;
+import com.faforever.client.clan.Clan;
+import com.faforever.client.clan.ClanService;
+import com.faforever.client.clan.ClanTooltipController;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.fx.WebViewConfigurer;
 import com.faforever.client.i18n.I18n;
@@ -31,6 +34,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
 import org.bridj.Platform;
+import org.hamcrest.CoreMatchers;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Rule;
 import org.junit.Test;
@@ -40,6 +44,7 @@ import org.testfx.util.WaitForAsyncUtils;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 
@@ -48,10 +53,10 @@ import static com.faforever.client.chat.SocialStatus.FOE;
 import static com.faforever.client.chat.SocialStatus.FRIEND;
 import static com.faforever.client.chat.SocialStatus.OTHER;
 import static com.faforever.client.chat.SocialStatus.SELF;
-import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
+import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.core.Is.is;
-import static org.hamcrest.text.IsEmptyString.isEmptyString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.mockito.Matchers.any;
@@ -63,6 +68,7 @@ import static org.mockito.Mockito.when;
 public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
 
   private static final long TIMEOUT = 5000;
+  private static final String sampleClanTag = "xyz";
   @Rule
   public TemporaryFolder tempDir = new TemporaryFolder();
   @Mock
@@ -92,11 +98,17 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
   @Mock
   private UiService uiService;
   @Mock
+  private ClanService clanService;
+  @Mock
   private WebViewConfigurer webViewConfigurer;
   @Mock
   private ReportingService reportingService;
   @Mock
   private EventBus eventBus;
+  @Mock
+  private CountryFlagService countryFlagService;
+
+
 
   private Preferences preferences;
   private AbstractChatTabController instance;
@@ -105,10 +117,11 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
   @Override
   public void start(Stage stage) throws Exception {
     super.start(stage);
-
-    instance = new AbstractChatTabController(userService, chatService, platformService, preferencesService, playerService,
-        audioService, timeService, i18n, imageUploadService, urlPreviewResolver, notificationService, reportingService,
-        uiService, autoCompletionHelper, eventBus, webViewConfigurer) {
+    instance = new AbstractChatTabController(clanService, webViewConfigurer, userService,
+        chatService, platformService, preferencesService, playerService,
+        audioService, timeService, i18n, imageUploadService,
+        urlPreviewResolver, notificationService, reportingService,
+        uiService, autoCompletionHelper, eventBus, countryFlagService) {
       private final Tab root = new Tab();
       private final WebView webView = new WebView();
       private final TextInputControl messageTextField = new TextField();
@@ -119,7 +132,7 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
       }
 
       @Override
-      protected TextInputControl getMessageTextField() {
+      protected TextInputControl messageTextField() {
         return messageTextField;
       }
 
@@ -129,11 +142,17 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
       }
     };
 
+
     TabPane tabPane = new TabPane(instance.getRoot());
     getRoot().getChildren().setAll(tabPane);
 
     preferences = new Preferences();
 
+    Clan clan = new Clan();
+    clan.setId(1234);
+
+    when(clanService.getClanByTag(sampleClanTag)).thenReturn(completedFuture(Optional.of(clan)));
+    when(uiService.loadFxml("theme/chat/clan_tooltip.fxml")).thenReturn(mock(ClanTooltipController.class));
     when(uiService.getThemeFileUrl(any())).thenReturn(getClass().getResource("/theme/chat/chat_section.html"));
     when(timeService.asShortTime(any())).thenReturn("123");
     when(userService.getUsername()).thenReturn("junit");
@@ -153,22 +172,22 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
   public void testOnSendMessageSuccessful() throws Exception {
     String receiver = "receiver";
     String message = "Some message";
-    instance.getMessageTextField().setText(message);
+    instance.messageTextField().setText(message);
     instance.setReceiver(receiver);
-    when(chatService.sendMessageInBackground(eq(receiver), any())).thenReturn(CompletableFuture.completedFuture(message));
+    when(chatService.sendMessageInBackground(eq(receiver), any())).thenReturn(completedFuture(message));
 
     instance.onSendMessage();
 
     verify(chatService).sendMessageInBackground(eq(receiver), eq(message));
-    assertThat(instance.getMessageTextField().getText(), isEmptyString());
-    assertThat(instance.getMessageTextField().isDisable(), is(false));
+    assertThat(instance.messageTextField().getText(), is(emptyString()));
+    assertThat(instance.messageTextField().isDisable(), is(false));
   }
 
   @Test
   public void testOnSendMessageFailed() throws Exception {
     String receiver = "receiver";
     String message = "Some message";
-    instance.getMessageTextField().setText(message);
+    instance.messageTextField().setText(message);
     instance.setReceiver(receiver);
 
     CompletableFuture<String> future = new CompletableFuture<>();
@@ -178,30 +197,56 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
     instance.onSendMessage();
 
     verify(chatService).sendMessageInBackground(receiver, message);
-    assertThat(instance.getMessageTextField().getText(), is(message));
-    assertThat(instance.getMessageTextField().isDisable(), is(false));
+    assertThat(instance.messageTextField().getText(), is(message));
+    assertThat(instance.messageTextField().isDisable(), is(false));
+  }
+
+  @Test
+  public void testHideClanInfo() throws Exception {
+    instance.clanInfo(sampleClanTag);
+    instance.hideClanInfo();
+    assertThat(instance.clanInfoPopup, is(CoreMatchers.nullValue()));
+  }
+
+  @Test
+  public void testShowClanInfo() throws Exception {
+    instance.clanInfo(sampleClanTag);
+    WaitForAsyncUtils.waitForFxEvents();
+    assertThat(instance.clanInfoPopup, CoreMatchers.notNullValue());
+  }
+
+  @Test
+  public void testShowClanWebsite() throws Exception {
+    Clan clan = new Clan();
+    clan.setId(1234);
+    clan.setWebsiteUrl("http://example.com");
+    instance.showClanWebsite(sampleClanTag);
+
+    WaitForAsyncUtils.waitForFxEvents();
+
+    verify(platformService).showDocument(any());
   }
 
   @Test
   public void testOnSendMessageSendActionSuccessful() throws Exception {
     String receiver = "receiver";
     String message = "/me is happy";
-    instance.getMessageTextField().setText(message);
+    instance.messageTextField().setText(message);
     instance.setReceiver(receiver);
-    when(chatService.sendActionInBackground(eq(receiver), any())).thenReturn(CompletableFuture.completedFuture(message));
+    when(chatService.sendActionInBackground(eq(receiver), any())).thenReturn(completedFuture(message));
 
     instance.onSendMessage();
 
     verify(chatService).sendActionInBackground(eq(receiver), eq("is happy"));
-    assertThat(instance.getMessageTextField().getText(), isEmptyString());
-    assertThat(instance.getMessageTextField().isDisable(), is(false));
+    assertThat(instance.messageTextField().getText(), is(emptyString()));
+    assertThat(instance.messageTextField().isDisable(), is(false));
   }
 
   @Test
   public void testOnSendMessageSendActionFailed() throws Exception {
     String receiver = "receiver";
     String message = "/me is happy";
-    instance.getMessageTextField().setText(message);
+    instance.messageTextField().setText(message);
     instance.setReceiver(receiver);
 
     CompletableFuture<String> future = new CompletableFuture<>();
@@ -211,8 +256,8 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
     instance.onSendMessage();
 
     verify(chatService).sendActionInBackground(receiver, "is happy");
-    assertThat(instance.getMessageTextField().getText(), is(message));
-    assertThat(instance.getMessageTextField().isDisable(), is(false));
+    assertThat(instance.messageTextField().getText(), is(message));
+    assertThat(instance.messageTextField().isDisable(), is(false));
   }
 
   @Test
@@ -257,6 +302,8 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
   public void testPreviewUrlReturnsNull() throws Exception {
     String url = "http://www.example.com";
 
+    when(urlPreviewResolver.resolvePreview(url)).thenReturn(completedFuture(null));
+
     instance.previewUrl(url);
 
     verify(urlPreviewResolver).resolvePreview(url);
@@ -266,7 +313,7 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
   public void testPreviewUrlReturnsPreview() throws Exception {
     String url = "http://www.example.com";
     UrlPreviewResolver.Preview preview = mock(UrlPreviewResolver.Preview.class);
-    when(urlPreviewResolver.resolvePreview(url)).thenReturn(preview);
+    when(urlPreviewResolver.resolvePreview(url)).thenReturn(completedFuture(Optional.of(preview)));
 
     WaitForAsyncUtils.waitForAsyncFx(1000, () -> instance.previewUrl(url));
 
@@ -283,19 +330,13 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
   public void testHideUrlPreview() throws Exception {
     String url = "http://www.example.com";
     UrlPreviewResolver.Preview preview = mock(UrlPreviewResolver.Preview.class);
-    when(urlPreviewResolver.resolvePreview(url)).thenReturn(preview);
+    when(urlPreviewResolver.resolvePreview(url)).thenReturn(completedFuture(Optional.of(preview)));
 
     WaitForAsyncUtils.waitForAsyncFx(TIMEOUT, () -> {
       instance.previewUrl(url);
       instance.hideUrlPreview();
     });
     // I don't see what could be verified here
-  }
-
-
-  @NotNull
-  private KeyEvent keyEvent(KeyCode keyCode) {
-    return keyEvent(keyCode, emptyList());
   }
 
   @NotNull
@@ -336,19 +377,19 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
     Image image = new Image(getClass().getResourceAsStream("/theme/images/close.png"));
 
     String url = "http://www.example.com/fake.png";
-    when(imageUploadService.uploadImageInBackground(any())).thenReturn(CompletableFuture.completedFuture(url));
+    when(imageUploadService.uploadImageInBackground(any())).thenReturn(completedFuture(url));
 
     WaitForAsyncUtils.waitForAsyncFx(TIMEOUT, () -> {
       ClipboardContent clipboardContent = new ClipboardContent();
       clipboardContent.putImage(image);
       Clipboard.getSystemClipboard().setContent(clipboardContent);
 
-      instance.getMessageTextField().getOnKeyReleased().handle(
+      instance.messageTextField().getOnKeyReleased().handle(
           keyEvent(KeyCode.V, singletonList(modifier))
       );
     });
 
-    assertThat(instance.getMessageTextField().getText(), is(url));
+    assertThat(instance.messageTextField().getText(), is(url));
   }
 
   @Test
@@ -356,19 +397,19 @@ public class AbstractChatTabControllerTest extends AbstractPlainJavaFxTest {
     Image image = new Image(getClass().getResourceAsStream("/theme/images/close.png"));
 
     String url = "http://www.example.com/fake.png";
-    when(imageUploadService.uploadImageInBackground(any())).thenReturn(CompletableFuture.completedFuture(url));
+    when(imageUploadService.uploadImageInBackground(any())).thenReturn(completedFuture(url));
 
     WaitForAsyncUtils.waitForAsyncFx(TIMEOUT, () -> {
       ClipboardContent clipboardContent = new ClipboardContent();
       clipboardContent.putImage(image);
       Clipboard.getSystemClipboard().setContent(clipboardContent);
 
-      instance.getMessageTextField().getOnKeyReleased().handle(
+      instance.messageTextField().getOnKeyReleased().handle(
           keyEvent(KeyCode.INSERT, singletonList(KeyCode.SHIFT))
       );
     });
 
-    assertThat(instance.getMessageTextField().getText(), is(url));
+    assertThat(instance.messageTextField().getText(), is(url));
   }
 
   @Test

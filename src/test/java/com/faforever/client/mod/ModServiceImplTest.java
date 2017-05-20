@@ -2,7 +2,6 @@ package com.faforever.client.mod;
 
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.io.ByteCopier;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.preferences.ForgedAlliancePrefs;
 import com.faforever.client.preferences.Preferences;
@@ -10,6 +9,7 @@ import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.remote.AssetService;
 import com.faforever.client.remote.FafService;
 import com.faforever.client.task.TaskService;
+import com.faforever.commons.io.ByteCopier;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleObjectProperty;
@@ -43,7 +43,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.CoreMatchers.is;
@@ -95,8 +95,6 @@ public class ModServiceImplTest {
   @Mock
   private AssetService assetService;
   @Mock
-  private ThreadPoolExecutor threadPoolExecutor;
-  @Mock
   private PlatformService platformService;
 
   private ModServiceImpl instance;
@@ -105,7 +103,7 @@ public class ModServiceImplTest {
 
   @Before
   public void setUp() throws Exception {
-    instance = new ModServiceImpl(taskService, fafService, preferencesService, applicationContext, threadPoolExecutor,
+    instance = new ModServiceImpl(taskService, fafService, preferencesService, applicationContext,
         new SimpleAnalyzer(), new RAMDirectory(), notificationService, i18n, platformService, assetService);
 
     gamePrefsPath = faDataDirectory.getRoot().toPath().resolve("game.prefs");
@@ -333,9 +331,9 @@ public class ModServiceImplTest {
     assertThat(mod.getSelectable(), is(true));
     assertThat(mod.getId(), is("9e8ea941-c306-4751-b367-a11000000502"));
     assertThat(mod.getUiOnly(), is(false));
-    assertThat(mod.getMountPoints(), hasSize(10));
-    assertThat(mod.getMountPoints().get(3).getDirectory(), is(blackopsSupportPath.resolve("effects")));
-    assertThat(mod.getMountPoints().get(3).getMountPath(), is("/effects"));
+    assertThat(mod.getMountInfos(), hasSize(10));
+    assertThat(mod.getMountInfos().get(3).getFile(), is(Paths.get("effects")));
+    assertThat(mod.getMountInfos().get(3).getMountPoint(), is("/effects"));
     assertThat(mod.getHookDirectories(), contains("/blackops"));
 
     mod = installedMods.get(2);
@@ -420,25 +418,21 @@ public class ModServiceImplTest {
 
   @Test
   public void testGetAvailableMods() throws Exception {
-    mockThreadPool();
-
-    when(fafService.getMods()).thenReturn(Arrays.asList(
+    when(fafService.getMods()).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
         ModInfoBeanBuilder.create().defaultValues().uid("1").get(),
         ModInfoBeanBuilder.create().defaultValues().uid("2").get()
-    ));
+    )));
     List<Mod> modInfoBeen = instance.getAvailableMods().toCompletableFuture().get();
     assertThat(modInfoBeen, hasSize(2));
   }
 
   @Test
   public void testGetMostLikedUiMods() throws Exception {
-    mockThreadPool();
-
-    when(fafService.getMods()).thenReturn(Arrays.asList(
+    when(fafService.getMods()).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
         ModInfoBeanBuilder.create().defaultValues().uid("1").uiMod(true).get(),
         ModInfoBeanBuilder.create().defaultValues().uid("2").uiMod(false).get(),
         ModInfoBeanBuilder.create().defaultValues().uid("3").uiMod(true).get()
-    ));
+    )));
     List<Mod> mods = instance.getMostLikedUiMods(1).toCompletableFuture().get();
     assertThat(mods, hasSize(1));
     assertThat(mods.get(0).getId(), is("1"));
@@ -446,13 +440,11 @@ public class ModServiceImplTest {
 
   @Test
   public void testLookupMod() throws Exception {
-    mockThreadPool();
-
-    when(fafService.getMods()).thenReturn(Arrays.asList(
+    when(fafService.getMods()).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
         ModInfoBeanBuilder.create().defaultValues().uid("1").name("Test mod 1").get(),
         ModInfoBeanBuilder.create().defaultValues().uid("2").name("Mod test").get(),
         ModInfoBeanBuilder.create().defaultValues().uid("3").name("Another mod").get()
-    ));
+    )));
 
     List<Mod> mods = instance.lookupMod("test", 3).toCompletableFuture().get();
     assertThat(mods, hasSize(2));
@@ -460,13 +452,6 @@ public class ModServiceImplTest {
     assertThat(mods.get(0).getVersion(), is(new ComparableVersion("1")));
     assertThat(mods.get(1).getId(), is("2"));
     assertThat(mods.get(1).getVersion(), is(new ComparableVersion("1")));
-  }
-
-  private void mockThreadPool() {
-    doAnswer(invocation -> {
-      ((Runnable) invocation.getArgument(0)).run();
-      return null;
-    }).when(threadPoolExecutor).execute(any(Runnable.class));
   }
 
   private InstallModTask stubInstallModTask() {

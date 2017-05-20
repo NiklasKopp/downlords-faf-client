@@ -2,6 +2,8 @@ package com.faforever.client.chat;
 
 import com.faforever.client.audio.AudioService;
 import com.faforever.client.chat.UrlPreviewResolver.Preview;
+import com.faforever.client.clan.ClanService;
+import com.faforever.client.clan.ClanTooltipController;
 import com.faforever.client.fx.Controller;
 import com.faforever.client.fx.JavaFxUtil;
 import com.faforever.client.fx.PlatformService;
@@ -57,6 +59,7 @@ import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import javafx.stage.Popup;
 import javafx.stage.PopupWindow;
+import javafx.stage.PopupWindow.AnchorLocation;
 import javafx.stage.Stage;
 import netscape.javascript.JSObject;
 import org.apache.commons.lang3.StringUtils;
@@ -69,6 +72,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.invoke.MethodHandles;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -127,20 +131,25 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
   protected final AudioService audioService;
   protected final TimeService timeService;
   protected final I18n i18n;
-  protected final ImageUploadService imageUploadService;
-  protected final UrlPreviewResolver urlPreviewResolver;
   protected final NotificationService notificationService;
   protected final ReportingService reportingService;
   protected final UiService uiService;
-  protected final AutoCompletionHelper autoCompletionHelper;
   protected final EventBus eventBus;
   protected final WebViewConfigurer webViewConfigurer;
+  protected final ImageUploadService imageUploadService;
+  protected final UrlPreviewResolver urlPreviewResolver;
+  protected final AutoCompletionHelper autoCompletionHelper;
+  protected final ClanService clanService;
+  private final CountryFlagService countryFlagService;
+
   /**
    * Messages that arrived before the web view was ready. Those are appended as soon as it is ready.
    */
   private final List<ChatMessage> waitingMessages;
   private final IntegerProperty unreadMessagesCount;
   private final ChangeListener<Boolean> resetUnreadMessagesListener;
+  @VisibleForTesting
+  Popup clanInfoPopup;
   private int lastEntryId;
   private boolean isChatReady;
   private WebEngine engine;
@@ -154,7 +163,6 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
    * Either a channel like "#aeolus" or a user like "Visionik".
    */
   private String receiver;
-
   private Pattern mentionPattern;
   private Tooltip linkPreviewTooltip;
   private ChangeListener<Boolean> stageFocusedListener;
@@ -162,9 +170,21 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
   private ChatMessage lastMessage;
 
   @Inject
-  public AbstractChatTabController(UserService userService, ChatService chatService, PlatformService platformService, PreferencesService preferencesService, PlayerService playerService, AudioService audioService, TimeService timeService, I18n i18n, ImageUploadService imageUploadService, UrlPreviewResolver urlPreviewResolver, NotificationService notificationService, ReportingService reportingService, UiService uiService, AutoCompletionHelper autoCompletionHelper, EventBus eventBus, WebViewConfigurer webViewConfigurer) {
-    this.userService = userService;
+  // TODO cut dependencies
+  public AbstractChatTabController(ClanService clanService, WebViewConfigurer webViewConfigurer,
+                                   UserService userService, ChatService chatService,
+                                   PlatformService platformService, PreferencesService preferencesService,
+                                   PlayerService playerService, AudioService audioService,
+                                   TimeService timeService, I18n i18n,
+                                   ImageUploadService imageUploadService, UrlPreviewResolver urlPreviewResolver,
+                                   NotificationService notificationService, ReportingService reportingService, UiService uiService,
+                                   AutoCompletionHelper autoCompletionHelper, EventBus eventBus, CountryFlagService countryFlagService) {
+
+    this.webViewConfigurer = webViewConfigurer;
+    this.clanService = clanService;
+    this.uiService = uiService;
     this.chatService = chatService;
+    this.userService = userService;
     this.platformService = platformService;
     this.preferencesService = preferencesService;
     this.playerService = playerService;
@@ -175,11 +195,10 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
     this.urlPreviewResolver = urlPreviewResolver;
     this.notificationService = notificationService;
     this.reportingService = reportingService;
-    this.uiService = uiService;
     this.autoCompletionHelper = autoCompletionHelper;
     this.eventBus = eventBus;
-    this.webViewConfigurer = webViewConfigurer;
-    
+    this.countryFlagService = countryFlagService;
+
     waitingMessages = new ArrayList<>();
     unreadMessagesCount = new SimpleIntegerProperty();
     resetUnreadMessagesListener = (observable, oldValue, newValue) -> {
@@ -260,19 +279,19 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
     StageHolder.getStage().focusedProperty().addListener(new WeakChangeListener<>(resetUnreadMessagesListener));
     getRoot().selectedProperty().addListener(new WeakChangeListener<>(resetUnreadMessagesListener));
 
-    autoCompletionHelper.bindTo(getMessageTextField());
+    autoCompletionHelper.bindTo(messageTextField());
   }
 
   /**
    * Registers listeners necessary to focus the message input field when changing to another message tab, changing from
    * another tab to the "chat" tab or re-focusing the window.
    */
-  private void addFocusListeners() {
+  protected void addFocusListeners() {
     getRoot().selectedProperty().addListener((observable, oldValue, newValue) -> {
       if (newValue) {
         // Since a tab is marked as "selected" before it's rendered, the text field can't be selected yet.
         // So let's schedule the focus to be executed afterwards
-        Platform.runLater(getMessageTextField()::requestFocus);
+        Platform.runLater(messageTextField()::requestFocus);
       }
     });
 
@@ -282,21 +301,21 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
       }
       stageFocusedListener = (window, windowFocusOld, windowFocusNew) -> {
         if (newTabPane.isVisible()) {
-          getMessageTextField().requestFocus();
+          messageTextField().requestFocus();
         }
       };
       StageHolder.getStage().focusedProperty().addListener(new WeakChangeListener<>(stageFocusedListener));
 
       newTabPane.focusedProperty().addListener((focusedTabPane, oldTabPaneFocus, newTabPaneFocus) -> {
         if (newTabPaneFocus) {
-          getMessageTextField().requestFocus();
+          messageTextField().requestFocus();
         }
       });
     });
   }
 
   private void addImagePasteListener() {
-    TextInputControl messageTextField = getMessageTextField();
+    TextInputControl messageTextField = messageTextField();
     messageTextField.setOnKeyReleased(event -> {
       if (isPaste(event)
           && Clipboard.getSystemClipboard().hasImage()) {
@@ -305,7 +324,7 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
     });
   }
 
-  protected abstract TextInputControl getMessageTextField();
+  protected abstract TextInputControl messageTextField();
 
   private boolean isPaste(KeyEvent event) {
     return (event.getCode() == KeyCode.V && event.isShortcutDown())
@@ -313,7 +332,7 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
   }
 
   private void pasteImage() {
-    TextInputControl messageTextField = getMessageTextField();
+    TextInputControl messageTextField = messageTextField();
     int currentCaretPosition = messageTextField.getCaretPosition();
 
     messageTextField.setDisable(true);
@@ -384,6 +403,55 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
   }
 
   /**
+   * Called from JavaScript when user hovers over a clan tag.
+   */
+  public void clanInfo(String clanTag) {
+    String clanTagWithReplacement = removeBrackets(clanTag);
+    clanService.getClanByTag(clanTagWithReplacement).thenAccept(clan -> Platform.runLater(() -> {
+      if (!clan.isPresent() || clanTagWithReplacement.isEmpty()) {
+        return;
+      }
+      ClanTooltipController clanTooltipController = uiService.loadFxml("theme/chat/clan_tooltip.fxml");
+      clanTooltipController.setClan(clan.get());
+      clanInfoPopup = new Popup();
+      clanTooltipController.getRoot().getStyleClass().add("tooltip");
+      clanInfoPopup.getContent().setAll(clanTooltipController.getRoot());
+      clanInfoPopup.setAnchorLocation(AnchorLocation.CONTENT_TOP_LEFT);
+      clanInfoPopup.show(getRoot().getTabPane().getScene().getWindow(), lastMouseX, lastMouseY + 10);
+      clanInfoPopup.setAutoHide(true);
+
+    }));
+  }
+
+  /**
+   * Called from JavaScript when user no longer hovers over a clan tag.
+   */
+  public void hideClanInfo() {
+    if (clanInfoPopup == null) {
+      return;
+    }
+    clanInfoPopup.hide();
+    clanInfoPopup = null;
+  }
+
+  /**
+   * Called from JavaScript when user clicks on clan tag.
+   */
+  public void showClanWebsite(String decoratedClanTag) {
+    String clanTag = removeBrackets(decoratedClanTag);
+    clanService.getClanByTag(clanTag).thenAccept(clan -> {
+      if (!clan.isPresent()) {
+        return;
+      }
+      platformService.showDocument(clan.get().getWebsiteUrl());
+    });
+  }
+
+  private String removeBrackets(String tag) {
+    return tag.replaceAll("[\\[\\]]", "");
+  }
+
+  /**
    * Called from JavaScript when user hovers over a user name.
    */
   public void playerInfo(String username) {
@@ -436,17 +504,19 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
    * Called from JavaScript when user hovers over an URL.
    */
   public void previewUrl(String urlString) {
-    Preview preview = urlPreviewResolver.resolvePreview(urlString);
-    if (preview == null) {
-      return;
-    }
-
-    linkPreviewTooltip = new Tooltip(preview.getDescription());
-    linkPreviewTooltip.setAutoHide(true);
-    linkPreviewTooltip.setAnchorLocation(PopupWindow.AnchorLocation.CONTENT_BOTTOM_LEFT);
-    linkPreviewTooltip.setGraphic(preview.getNode());
-    linkPreviewTooltip.setContentDisplay(ContentDisplay.TOP);
-    linkPreviewTooltip.show(getRoot().getTabPane(), lastMouseX + 20, lastMouseY);
+    urlPreviewResolver.resolvePreview(urlString)
+        .thenAccept(optionalPreview -> {
+          if (!optionalPreview.isPresent()) {
+            return;
+          }
+          Preview preview = optionalPreview.get();
+          linkPreviewTooltip = new Tooltip(preview.getDescription());
+          linkPreviewTooltip.setAutoHide(true);
+          linkPreviewTooltip.setAnchorLocation(PopupWindow.AnchorLocation.CONTENT_BOTTOM_LEFT);
+          linkPreviewTooltip.setGraphic(preview.getNode());
+          linkPreviewTooltip.setContentDisplay(ContentDisplay.TOP);
+          linkPreviewTooltip.show(getRoot().getTabPane(), lastMouseX + 20, lastMouseY);
+        });
   }
 
   /**
@@ -460,7 +530,7 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
   }
 
   public void onSendMessage() {
-    TextInputControl messageTextField = getMessageTextField();
+    TextInputControl messageTextField = messageTextField();
 
     String text = messageTextField.getText();
     if (StringUtils.isEmpty(text)) {
@@ -481,7 +551,7 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
   }
 
   private void sendMessage() {
-    TextInputControl messageTextField = getMessageTextField();
+    TextInputControl messageTextField = messageTextField();
     messageTextField.setDisable(true);
 
     final String text = messageTextField.getText();
@@ -595,8 +665,12 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
 
       String avatarUrl = "";
       String clanTag = "";
+      String countryFlagUrl = "";
       if (player != null) {
         avatarUrl = player.getAvatarUrl();
+        countryFlagUrl = countryFlagService.getCountryFlagUrl(player.getCountry())
+            .map(URL::toString)
+            .orElse("");
 
         if (StringUtils.isNotEmpty(player.getClan())) {
           clanTag = i18n.get("chat.clanTagFormat", player.getClan());
@@ -608,6 +682,7 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
           .replace("{avatar}", StringUtils.defaultString(avatarUrl))
           .replace("{username}", login)
           .replace("{clan-tag}", clanTag)
+          .replace("{country-flag}", StringUtils.defaultString(countryFlagUrl))
           .replace("{section-id}", String.valueOf(++lastEntryId));
 
       Collection<String> cssClasses = new ArrayList<>();
@@ -704,7 +779,7 @@ public abstract class AbstractChatTabController implements Controller<Tab> {
    * Subclasses may override in order to perform actions when the view is being displayed.
    */
   protected void onDisplay() {
-    getMessageTextField().requestFocus();
+    messageTextField().requestFocus();
   }
 
   /**

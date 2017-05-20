@@ -9,9 +9,9 @@ import com.faforever.client.game.MapPreviewTableCell;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.MapService;
 import com.faforever.client.map.MapServiceImpl.PreviewSize;
-import com.faforever.client.remote.domain.GameState;
+import com.faforever.client.remote.domain.GameStatus;
 import com.faforever.client.theme.UiService;
-import com.google.api.client.repackaged.com.google.common.base.Joiner;
+import com.google.common.base.Joiner;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
@@ -19,6 +19,7 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
+import javafx.collections.ObservableMap;
 import javafx.collections.transformation.SortedList;
 import javafx.scene.Node;
 import javafx.scene.control.TableColumn;
@@ -62,7 +63,7 @@ public class LiveReplayController extends AbstractViewController<Node> {
   }
 
   public void initialize() {
-    initializeGameTable(gameService.getGames().filtered(game -> game.getStatus() == GameState.PLAYING));
+    initializeGameTable(gameService.getGames().filtered(game -> game.getStatus() == GameStatus.PLAYING));
   }
 
   public void initializeGameTable(ObservableList<Game> games) {
@@ -83,6 +84,7 @@ public class LiveReplayController extends AbstractViewController<Node> {
     hostColumn.setCellFactory(param -> new StringCell<>(String::toString));
     modsColumn.setCellValueFactory(this::modCell);
     modsColumn.setCellFactory(param -> new StringCell<>(String::toString));
+    watchColumn.setCellValueFactory(param -> new SimpleObjectProperty<>(param.getValue()));
     watchColumn.setCellFactory(param -> new NodeTableCell<>(this::watchReplayButton));
 
     liveReplayControllerRoot.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue)
@@ -93,7 +95,7 @@ public class LiveReplayController extends AbstractViewController<Node> {
 
   private Node watchReplayButton(Game game) {
     WatchButtonController controller = uiService.loadFxml("theme/vault/replay/watch_button.fxml");
-    controller.setGameId(game.getId());
+    controller.setGame(game);
     return controller.getRoot();
   }
 
@@ -104,13 +106,14 @@ public class LiveReplayController extends AbstractViewController<Node> {
 
   @NotNull
   private ObservableValue<String> modCell(CellDataFeatures<Game, String> param) {
-    int simModCount = param.getValue().getSimMods().size();
-    List<String> modNames = param.getValue().getSimMods().entrySet().stream()
+    ObservableMap<String, String> simMods = param.getValue().getSimMods();
+    int simModCount = simMods.size();
+    List<String> modNames = simMods.entrySet().stream()
         .limit(2)
         .map(Entry::getValue)
         .collect(Collectors.toList());
     if (simModCount > 2) {
-      return new SimpleStringProperty(i18n.get("game.mods.twoAndMore", modNames.get(0), modNames.get(2)));
+      return new SimpleStringProperty(i18n.get("game.mods.twoAndMore", modNames.get(0), modNames.size()));
     }
     return new SimpleStringProperty(Joiner.on(i18n.get("textSeparator")).join(modNames));
   }

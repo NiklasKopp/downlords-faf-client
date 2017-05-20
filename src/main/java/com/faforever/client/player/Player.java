@@ -1,9 +1,11 @@
 package com.faforever.client.player;
 
+import com.faforever.client.api.dto.GlobalRating;
+import com.faforever.client.api.dto.Ladder1v1Rating;
 import com.faforever.client.chat.SocialStatus;
 import com.faforever.client.game.Game;
 import com.faforever.client.game.PlayerStatus;
-import com.faforever.client.remote.domain.GameState;
+import com.faforever.client.remote.domain.GameStatus;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.FloatProperty;
@@ -22,6 +24,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableSet;
 
 import java.time.Instant;
+import java.util.Optional;
 
 import static com.faforever.client.chat.SocialStatus.OTHER;
 
@@ -85,6 +88,17 @@ public class Player {
   public Player(String username) {
     this();
     this.username.set(username);
+  }
+
+  public static Player fromDto(com.faforever.client.api.dto.Player dto) {
+    Player player = new Player(dto.getLogin());
+    player.setId(Integer.parseInt(dto.getId()));
+    player.setUsername(dto.getLogin());
+    player.setGlobalRatingMean(Optional.ofNullable(dto.getGlobalRating()).map(GlobalRating::getMean).orElse(0d).floatValue());
+    player.setGlobalRatingDeviation(Optional.ofNullable(dto.getGlobalRating()).map(GlobalRating::getDeviation).orElse(0d).floatValue());
+    player.setLeaderboardRatingMean(Optional.ofNullable(dto.getLadder1v1Rating()).map(Ladder1v1Rating::getMean).orElse(0d).floatValue());
+    player.setLeaderboardRatingDeviation(Optional.ofNullable(dto.getLadder1v1Rating()).map(Ladder1v1Rating::getDeviation).orElse(0d).floatValue());
+    return player;
   }
 
   public SocialStatus getSocialStatus() {
@@ -262,12 +276,12 @@ public class Player {
       status.set(PlayerStatus.IDLE);
     } else {
       this.status.bind(Bindings.createObjectBinding(() -> {
-        if (getGame().getStatus() == GameState.OPEN) {
+        if (getGame().getStatus() == GameStatus.OPEN) {
           if (getGame().getHost().equalsIgnoreCase(username.get())) {
             return PlayerStatus.HOSTING;
           }
           return PlayerStatus.LOBBYING;
-        } else if (getGame().getStatus() == GameState.CLOSED) {
+        } else if (getGame().getStatus() == GameStatus.CLOSED) {
           return PlayerStatus.IDLE;
         }
         return PlayerStatus.PLAYING;

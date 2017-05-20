@@ -1,7 +1,8 @@
 package com.faforever.client.coop;
 
-import com.faforever.client.api.CoopLeaderboardEntry;
+import com.faforever.client.api.dto.CoopResult;
 import com.faforever.client.fx.Controller;
+import com.faforever.client.fx.JavaFxUtil;
 import com.faforever.client.fx.NodeTableCell;
 import com.faforever.client.fx.StringCell;
 import com.faforever.client.fx.StringListCell;
@@ -20,7 +21,7 @@ import com.faforever.client.notification.NotificationService;
 import com.faforever.client.notification.ReportAction;
 import com.faforever.client.notification.Severity;
 import com.faforever.client.preferences.PreferencesService;
-import com.faforever.client.remote.domain.GameState;
+import com.faforever.client.remote.domain.GameStatus;
 import com.faforever.client.replay.ReplayService;
 import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.theme.UiService;
@@ -46,7 +47,6 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.text.Text;
 import javafx.scene.web.WebView;
@@ -70,8 +70,8 @@ import static javafx.collections.FXCollections.observableList;
 public class CoopController implements Controller<Node> {
 
   private static final Predicate<Game> OPEN_COOP_GAMES_PREDICATE = gameInfoBean ->
-      gameInfoBean.getStatus() == GameState.OPEN
-          && COOP.getString().equals(gameInfoBean.getFeaturedMod());
+      gameInfoBean.getStatus() == GameStatus.OPEN
+          && COOP.getTechnicalName().equals(gameInfoBean.getFeaturedMod());
 
   private final ReplayService replayService;
   private final GameService gameService;
@@ -97,14 +97,14 @@ public class CoopController implements Controller<Node> {
   public Label selectedGameNumberOfPlayersLabel;
   public Label selectedGameHostLabel;
   public ScrollPane selectedGamePane;
-  public TableView<CoopLeaderboardEntry> leaderboardTable;
+  public TableView<CoopResult> leaderboardTable;
   public ComboBox<Integer> numberOfPlayersComboBox;
-  public TableColumn<CoopLeaderboardEntry, Integer> rankColumn;
-  public TableColumn<CoopLeaderboardEntry, Integer> playerCountColumn;
-  public TableColumn<CoopLeaderboardEntry, String> playerNamesColumn;
-  public TableColumn<CoopLeaderboardEntry, Boolean> secondaryObjectivesColumn;
-  public TableColumn<CoopLeaderboardEntry, Integer> timeColumn;
-  public TableColumn<CoopLeaderboardEntry, String> replayColumn;
+  public TableColumn<CoopResult, Integer> rankColumn;
+  public TableColumn<CoopResult, Integer> playerCountColumn;
+  public TableColumn<CoopResult, String> playerNamesColumn;
+  public TableColumn<CoopResult, Boolean> secondaryObjectivesColumn;
+  public TableColumn<CoopResult, Integer> timeColumn;
+  public TableColumn<CoopResult, String> replayColumn;
 
   @Inject
   public CoopController(ReplayService replayService, GameService gameService, CoopService coopService, NotificationService notificationService, I18n i18n, ReportingService reportingService, MapService mapService, PreferencesService preferencesService, UiService uiService, TimeService timeService, WebViewConfigurer webViewConfigurer, ModService modService) {
@@ -238,10 +238,7 @@ public class CoopController implements Controller<Node> {
 
   private void populateContainer(Node root) {
     gameViewContainer.getChildren().setAll(root);
-    AnchorPane.setBottomAnchor(root, 0d);
-    AnchorPane.setLeftAnchor(root, 0d);
-    AnchorPane.setRightAnchor(root, 0d);
-    AnchorPane.setTopAnchor(root, 0d);
+    JavaFxUtil.setAnchors(gameViewContainer, 0d);
   }
 
   // FIXME call before display
@@ -260,7 +257,7 @@ public class CoopController implements Controller<Node> {
   }
 
   public void onPlayButtonClicked() {
-    modService.getFeaturedMod(COOP.getString())
+    modService.getFeaturedMod(COOP.getTechnicalName())
         .thenAccept(featuredModBean -> gameService.hostGame(new NewGameInfo(titleTextField.getText(),
             Strings.emptyToNull(passwordTextField.getText()), featuredModBean, getSelectedMission().getMapFolderName(),
             emptySet())));

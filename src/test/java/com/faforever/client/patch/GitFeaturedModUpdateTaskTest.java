@@ -3,7 +3,9 @@ package com.faforever.client.patch;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.mod.ModInfoBeanBuilder;
 import com.faforever.client.mod.ModService;
+import com.faforever.client.test.AbstractPlainJavaFxTest;
 import com.faforever.client.util.TestResources;
+import com.faforever.commons.mod.MountInfo;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.eclipse.jgit.lib.ProgressMonitor;
 import org.junit.Before;
@@ -35,7 +37,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
-public class GitFeaturedModUpdateTaskTest {
+public class GitFeaturedModUpdateTaskTest extends AbstractPlainJavaFxTest {
 
   private static final String GIT_PATCH_URL = "git://dummy/repo.git";
 
@@ -50,7 +52,7 @@ public class GitFeaturedModUpdateTaskTest {
   private ModService modService;
 
   /**
-   * The directory containing the cloned preferences repository
+   * The directory containing the cloned game repository
    */
   private Path clonedRepoDir;
   private GitFeaturedModUpdateTaskImpl instance;
@@ -74,11 +76,14 @@ public class GitFeaturedModUpdateTaskTest {
       return null;
     }).when(gitWrapper).clone(eq(GIT_PATCH_URL), eq(clonedRepoDir), any(ProgressMonitor.class));
     when(modService.readModVersion(clonedRepoDir)).thenReturn(new ComparableVersion("3663"));
+
+    Path baseDir = Paths.get("test");
+
     when(modService.extractModInfo(any(), eq(clonedRepoDir))).thenReturn(
         ModInfoBeanBuilder.create().mountPoints(
             Arrays.asList(
-                new MountPoint(Paths.get("env"), "/env"),
-                new MountPoint(Paths.get("projectiles"), "/projectiles")
+                new MountInfo(baseDir, Paths.get("env"), "/env"),
+                new MountInfo(baseDir, Paths.get("projectiles"), "/projectiles")
             )).get());
 
     instance.setRepositoryDirectory(clonedRepoDir);
@@ -89,9 +94,9 @@ public class GitFeaturedModUpdateTaskTest {
 
     assertThat(result, not(nullValue()));
     assertThat(result.getVersion(), is(new ComparableVersion("3663")));
-    assertThat(result.getMountPoints(), hasSize(2));
-    assertThat(result.getMountPoints().get(0).getMountPath(), is("/env"));
-    assertThat(result.getMountPoints().get(0).getDirectory(), is(Paths.get("env")));
+    assertThat(result.getMountInfos(), hasSize(2));
+    assertThat(result.getMountInfos().get(0).getFile(), is(Paths.get("env")));
+    assertThat(result.getMountInfos().get(0).getMountPoint(), is("/env"));
 
     verify(gitWrapper).clone(eq(GIT_PATCH_URL), eq(clonedRepoDir), any(ProgressMonitor.class));
   }

@@ -1,9 +1,12 @@
 package com.faforever.client.chat;
 
 import com.faforever.client.audio.AudioService;
+import com.faforever.client.clan.ClanService;
+import com.faforever.client.fx.JavaFxUtil;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.fx.WebViewConfigurer;
 import com.faforever.client.i18n.I18n;
+import com.faforever.client.map.MapService;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.player.Player;
 import com.faforever.client.player.PlayerService;
@@ -17,6 +20,7 @@ import com.faforever.client.util.TimeService;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.eventbus.EventBus;
 import javafx.application.Platform;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.web.WebView;
@@ -26,7 +30,6 @@ import org.springframework.stereotype.Component;
 
 import javax.inject.Inject;
 import java.time.Instant;
-import java.util.concurrent.ThreadPoolExecutor;
 
 import static com.faforever.client.chat.SocialStatus.FOE;
 
@@ -37,12 +40,37 @@ public class PrivateChatTabController extends AbstractChatTabController {
   public Tab privateChatTabRoot;
   public WebView messagesWebView;
   public TextInputControl messageTextField;
+  public PrivateUserInfoController privateUserInfoController;
+  public ScrollPane gameDetailScrollPane;
+
   private boolean userOffline;
 
   @Inject
-  public PrivateChatTabController(UserService userService, ChatService chatService, PlatformService platformService, PreferencesService preferencesService, PlayerService playerService, AudioService audioService, TimeService timeService, I18n i18n, ImageUploadService imageUploadService, UrlPreviewResolver urlPreviewResolver, NotificationService notificationService, ReportingService reportingService, UiService uiService, AutoCompletionHelper autoCompletionHelper, EventBus eventBus, WebViewConfigurer webViewConfigurer, ThreadPoolExecutor threadPoolExecutor) {
-    super(userService, chatService, platformService, preferencesService, playerService, audioService, timeService, i18n, imageUploadService, urlPreviewResolver, notificationService, reportingService, uiService, autoCompletionHelper, eventBus, webViewConfigurer);
+  // TODO cut dependencies
+  public PrivateChatTabController(ClanService clanService,
+                                  UserService userService,
+                                  PlatformService platformService,
+                                  PreferencesService preferencesService,
+                                  PlayerService playerService,
+                                  TimeService timeService,
+                                  I18n i18n,
+                                  ImageUploadService imageUploadService,
+                                  UrlPreviewResolver urlPreviewResolver,
+                                  NotificationService notificationService,
+                                  ReportingService reportingService,
+                                  UiService uiService,
+                                  AutoCompletionHelper autoCompletionHelper,
+                                  EventBus eventBus,
+                                  AudioService audioService,
+                                  ChatService chatService,
+                                  MapService mapService,
+                                  WebViewConfigurer webViewConfigurer,
+                                  CountryFlagService countryFlagService) {
+    super(clanService, webViewConfigurer, userService, chatService, platformService, preferencesService, playerService, audioService, timeService, i18n,
+        imageUploadService, urlPreviewResolver, notificationService, reportingService, uiService, autoCompletionHelper,
+        eventBus, countryFlagService);
   }
+
 
   boolean isUserOffline() {
     return userOffline;
@@ -58,9 +86,14 @@ public class PrivateChatTabController extends AbstractChatTabController {
     super.setReceiver(username);
     privateChatTabRoot.setId(username);
     privateChatTabRoot.setText(username);
+
+    Player player = playerService.getPlayerForUsername(username);
+    privateUserInfoController.setPlayer(player);
   }
 
   public void initialize() {
+    super.initialize();
+    JavaFxUtil.fixScrollSpeed(gameDetailScrollPane);
     userOffline = false;
     chatService.addChatUsersByNameListener(change -> {
       if (change.wasRemoved()) {
@@ -70,11 +103,10 @@ public class PrivateChatTabController extends AbstractChatTabController {
         onPlayerConnected(change.getKey(), change.getValueRemoved());
       }
     });
-    webViewConfigurer.configureWebView(messagesWebView);
   }
 
   @Override
-  protected TextInputControl getMessageTextField() {
+  protected TextInputControl messageTextField() {
     return messageTextField;
   }
 
@@ -104,17 +136,19 @@ public class PrivateChatTabController extends AbstractChatTabController {
 
   @VisibleForTesting
   void onPlayerDisconnected(String userName, ChatUser userItem) {
-    if (userName.equals(getReceiver())) {
-      userOffline = true;
-      Platform.runLater(() -> onChatMessage(new ChatMessage(userName, Instant.now(), i18n.get("chat.operator") + ":", i18n.get("chat.privateMessage.playerLeft", userName), true)));
+    if (!userName.equals(getReceiver())) {
+      return;
     }
+    userOffline = true;
+    Platform.runLater(() -> onChatMessage(new ChatMessage(userName, Instant.now(), i18n.get("chat.operator") + ":", i18n.get("chat.privateMessage.playerLeft", userName), true)));
   }
 
   @VisibleForTesting
   void onPlayerConnected(String userName, ChatUser userItem) {
-    if (userOffline && userName.equals(getReceiver())) {
-      userOffline = false;
-      Platform.runLater(() -> onChatMessage(new ChatMessage(userName, Instant.now(), i18n.get("chat.operator") + ":", i18n.get("chat.privateMessage.playerReconnect", userName), true)));
+    if (!userOffline || !userName.equals(getReceiver())) {
+      return;
     }
+    userOffline = false;
+    Platform.runLater(() -> onChatMessage(new ChatMessage(userName, Instant.now(), i18n.get("chat.operator") + ":", i18n.get("chat.privateMessage.playerReconnect", userName), true)));
   }
 }

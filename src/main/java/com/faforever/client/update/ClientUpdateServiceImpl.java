@@ -1,5 +1,6 @@
 package com.faforever.client.update;
 
+import com.faforever.client.FafClientApplication;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.Action;
@@ -20,9 +21,9 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.nio.file.Path;
 
-import static com.faforever.client.io.Bytes.formatSize;
 import static com.faforever.client.notification.Severity.INFO;
 import static com.faforever.client.notification.Severity.WARN;
+import static com.faforever.commons.io.Bytes.formatSize;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
 import static org.apache.commons.lang3.StringUtils.defaultString;
@@ -30,7 +31,7 @@ import static org.apache.commons.lang3.StringUtils.defaultString;
 
 @Lazy
 @Service
-@Profile("!local")
+@Profile("!" + FafClientApplication.POFILE_OFFLINE)
 public class ClientUpdateServiceImpl implements ClientUpdateService {
 
   private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());

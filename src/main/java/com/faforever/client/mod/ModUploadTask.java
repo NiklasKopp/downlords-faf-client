@@ -1,13 +1,13 @@
 package com.faforever.client.mod;
 
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.io.ByteCountListener;
-import com.faforever.client.io.Zipper;
 import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.remote.FafService;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.ResourceLocks;
 import com.faforever.client.util.Validator;
+import com.faforever.commons.io.ByteCountListener;
+import com.faforever.commons.io.Zipper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
@@ -22,7 +22,7 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.zip.ZipOutputStream;
 
-import static com.faforever.client.io.Bytes.formatSize;
+import static com.faforever.commons.io.Bytes.formatSize;
 import static java.nio.file.Files.createTempFile;
 import static java.nio.file.Files.newOutputStream;
 

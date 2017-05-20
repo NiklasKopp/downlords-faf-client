@@ -1,16 +1,31 @@
 package com.faforever.client.api;
 
-import com.faforever.client.coop.CoopMission;
-import com.faforever.client.io.ByteCountListener;
-import com.faforever.client.leaderboard.Ranked1v1EntryBean;
+import com.faforever.client.api.dto.AchievementDefinition;
+import com.faforever.client.api.dto.Clan;
+import com.faforever.client.api.dto.CoopMission;
+import com.faforever.client.api.dto.CoopResult;
+import com.faforever.client.api.dto.FeaturedModFile;
+import com.faforever.client.api.dto.Game;
+import com.faforever.client.api.dto.GamePlayerStats;
+import com.faforever.client.api.dto.GameReview;
+import com.faforever.client.api.dto.GlobalLeaderboardEntry;
+import com.faforever.client.api.dto.Ladder1v1LeaderboardEntry;
+import com.faforever.client.api.dto.Map;
+import com.faforever.client.api.dto.MapVersionReview;
+import com.faforever.client.api.dto.Mod;
+import com.faforever.client.api.dto.ModVersionReview;
+import com.faforever.client.api.dto.PlayerAchievement;
+import com.faforever.client.api.dto.PlayerEvent;
+import com.faforever.client.game.KnownFeaturedMod;
 import com.faforever.client.map.MapBean;
-import com.faforever.client.mod.FeaturedModBean;
-import com.faforever.client.mod.Mod;
-import com.faforever.client.replay.Replay;
+import com.faforever.client.mod.FeaturedMod;
+import com.faforever.commons.io.ByteCountListener;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Provides access to the FAF REST API. Services should not access this class directly, but use {@link
@@ -31,27 +46,27 @@ public interface FafApiAccessor {
 
   List<Mod> getMods();
 
-  List<FeaturedMod> getFeaturedMods();
+  List<com.faforever.client.api.dto.FeaturedMod> getFeaturedMods();
 
-  MapBean findMapByName(String mapId);
+  List<Ladder1v1LeaderboardEntry> getLadder1v1Leaderboard();
 
-  List<Ranked1v1EntryBean> getLeaderboardEntries(RatingType ratingType);
+  List<GlobalLeaderboardEntry> getGlobalLeaderboard();
 
-  Ranked1v1Stats getRanked1v1Stats();
+  Ladder1v1LeaderboardEntry getLadder1v1EntryForPlayer(int playerId);
 
-  Ranked1v1EntryBean getRanked1v1EntryForPlayer(int playerId);
+  List<GamePlayerStats> getGamePlayerStats(int playerId, KnownFeaturedMod knownFeaturedMod);
 
-  History getRatingHistory(RatingType ratingType, int playerId);
+  List<Map> getAllMaps();
 
-  List<MapBean> getMaps();
+  List<Map> getMostDownloadedMaps(int count);
 
-  List<MapBean> getMostDownloadedMaps(int count);
+  List<Map> getMostPlayedMaps(int count);
 
-  List<MapBean> getMostPlayedMaps(int count);
+  List<Map> getHighestRatedMaps(int count);
 
-  List<MapBean> getBestRatedMaps(int count);
+  List<Map> getNewestMaps(int count);
 
-  List<MapBean> getNewestMaps(int count);
+  List<Game> getLastGamesOnMap(int playerId, int mapVersionId, int count);
 
   void uploadMod(Path file, ByteCountListener listener);
 
@@ -59,23 +74,39 @@ public interface FafApiAccessor {
 
   List<CoopMission> getCoopMissions();
 
-  List<CoopLeaderboardEntry> getCoopLeaderboard(String missionId, int numberOfPlayers);
+  List<CoopResult> getCoopLeaderboard(String missionId, int numberOfPlayers);
 
   void changePassword(String username, String currentPasswordHash, String newPasswordHash) throws IOException;
 
   Mod getMod(String uid);
 
-  List<FeaturedModFile> getFeaturedModFiles(FeaturedModBean featuredModBean, Integer version);
+  List<FeaturedModFile> getFeaturedModFiles(FeaturedMod featuredMod, Integer version);
 
-  List<Replay> searchReplayByPlayer(String playerName);
+  List<Game> getNewestReplays(int count);
 
-  List<Replay> searchReplayByMap(String mapName);
+  List<Game> getHighestRatedReplays(int count);
 
-  List<Replay> searchReplayByMod(FeaturedMod featuredMod);
+  List<Game> getMostWatchedReplays(int count);
 
-  List<Replay> getNewestReplays(int count);
+  List<Game> findReplaysByQuery(String condition, int maxResults);
 
-  List<Replay> getHighestRatedReplays(int count);
+  Optional<MapBean> findMapByFolderName(String folderName);
 
-  List<Replay> getMostWatchedReplays(int count);
+  List<com.faforever.client.api.dto.Player> getPlayersByIds(Collection<Integer> playerIds);
+
+  GameReview createGameReview(GameReview review);
+
+  void updateGameReview(GameReview review);
+
+  ModVersionReview createModVersionReview(ModVersionReview review);
+
+  void updateModVersionReview(ModVersionReview review);
+
+  MapVersionReview createMapVersionReview(MapVersionReview review);
+
+  void updateMapVersionReview(MapVersionReview review);
+
+  void deleteGameReview(int id);
+
+  Optional<Clan> getClanByTag(String tag);
 }

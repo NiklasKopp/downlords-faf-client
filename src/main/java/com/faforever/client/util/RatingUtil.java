@@ -1,14 +1,10 @@
 package com.faforever.client.util;
 
-import com.faforever.client.player.Player;
 import com.faforever.client.domain.RatingHistoryDataPoint;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.faforever.client.player.Player;
 
 public final class RatingUtil {
-
-  private static final Pattern RATING_PATTERN = Pattern.compile("([<>+~](?:\\d\\.?\\d?k|\\d{3,4})|(?:\\d\\.?\\d?k|\\d{3,4})[<>+]|(?:\\d\\.?\\d?k|\\d{1,4})\\s?-\\s?(?:\\d\\.?\\d?k|\\d{3,4}))");
 
   private RatingUtil() {
     // Utility class
@@ -26,8 +22,8 @@ public final class RatingUtil {
     return getRating(playerInfo.getGlobalRatingMean(), playerInfo.getGlobalRatingDeviation());
   }
 
-  public static int getRating(float ratingMean, float ratingDeviation) {
-    return (int) (ratingMean - 3 * ratingDeviation);
+  public static int getRating(double ratingMean, double ratingDeviation) {
+    return (int) (ratingMean - 3f * ratingDeviation);
   }
 
   public static int getLeaderboardRating(Player player) {
@@ -46,11 +42,7 @@ public final class RatingUtil {
     return getRating(datapoint.getMean(), datapoint.getDeviation());
   }
 
-  public static String extractRating(String title) {
-    Matcher matcher = RATING_PATTERN.matcher(title);
-    if (matcher.find()) {
-      return matcher.group(1);
-    }
-    return null;
+  public static int getRating(Rating rating) {
+    return getRating(rating.getMean(), rating.getDeviation());
   }
 }

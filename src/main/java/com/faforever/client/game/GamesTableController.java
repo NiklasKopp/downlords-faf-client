@@ -7,7 +7,7 @@ import com.faforever.client.map.MapService;
 import com.faforever.client.map.MapServiceImpl.PreviewSize;
 import com.faforever.client.remote.domain.RatingRange;
 import com.faforever.client.theme.UiService;
-import com.google.api.client.repackaged.com.google.common.base.Joiner;
+import com.google.common.base.Joiner;
 import javafx.application.Platform;
 import javafx.beans.Observable;
 import javafx.beans.binding.Bindings;
@@ -119,7 +119,7 @@ public class GamesTableController implements Controller<Node> {
         .map(Entry::getValue)
         .collect(Collectors.toList());
     if (simModCount > 2) {
-      return new SimpleStringProperty(i18n.get("game.mods.twoAndMore", modNames.get(0), modNames.get(2)));
+      return new SimpleStringProperty(i18n.get("game.mods.twoAndMore", modNames.get(0), modNames.size()));
     }
     return new SimpleStringProperty(Joiner.on(i18n.get("textSeparator")).join(modNames));
   }

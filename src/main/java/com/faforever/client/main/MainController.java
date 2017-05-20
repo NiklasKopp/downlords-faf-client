@@ -265,11 +265,11 @@ public class MainController implements Controller<Node> {
   private void onMatchmakerMessage(MatchmakerMessage message) {
     if (message.getQueues() == null
         || gameService.gameRunningProperty().get()
-        || !preferencesService.getPreferences().getNotification().isRanked1v1ToastEnabled()) {
+        || !preferencesService.getPreferences().getNotification().getLadder1v1ToastEnabled()) {
       return;
     }
 
-    Player currentPlayer = playerService.getCurrentPlayer();
+    Player currentPlayer = playerService.getCurrentPlayer().orElseThrow(() -> new IllegalStateException("Player has not been set"));
 
     int deviationFor80PercentQuality = (int) (ratingBeta / 2.5f);
     int deviationFor75PercentQuality = (int) (ratingBeta / 1.25f);
@@ -307,7 +307,7 @@ public class MainController implements Controller<Node> {
     notificationService.addNotification(new TransientNotification(
         i18n.get("ranked1v1.notification.title"),
         i18n.get("ranked1v1.notification.message"),
-        uiService.getThemeImage(UiService.RANKED_1V1_IMAGE),
+        uiService.getThemeImage(UiService.LADDER_1V1_IMAGE),
         event -> eventBus.post(new NavigateEvent(NavigationItem.PLAY))
     ));
   }
@@ -420,6 +420,7 @@ public class MainController implements Controller<Node> {
     SettingsController settingsController = uiService.loadFxml("theme/settings/settings.fxml");
     WindowController windowController = uiService.loadFxml("theme/window.fxml");
     windowController.configure(stage, settingsController.getRoot(), true, CLOSE);
+    windowController.setOnHiding(event -> preferencesService.storeInBackground());
 
     stage.setTitle(i18n.get("settings.windowTitle"));
     stage.show();

@@ -1,6 +1,7 @@
 package com.faforever.client.chat;
 
 import com.faforever.client.audio.AudioService;
+import com.faforever.client.clan.ClanService;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.fx.WebViewConfigurer;
 import com.faforever.client.i18n.I18n;
@@ -31,9 +32,9 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.scheduling.TaskScheduler;
 import org.testfx.util.WaitForAsyncUtils;
 
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static com.faforever.client.theme.UiService.CHAT_CONTAINER;
@@ -64,15 +65,15 @@ public class ChannelTabControllerTest extends AbstractPlainJavaFxTest {
   @Mock
   private UserService userService;
   @Mock
-  private ImageUploadService imageUploadService;
+  private PreferencesService preferencesService;
   @Mock
   private PlayerService playerService;
   @Mock
+  private PlatformService platformService;
+  @Mock
   private TimeService timeService;
   @Mock
-  private PreferencesService preferencesService;
-  @Mock
-  private PlatformService platformService;
+  private ImageUploadService imageUploadService;
   @Mock
   private I18n i18n;
   @Mock
@@ -80,11 +81,13 @@ public class ChannelTabControllerTest extends AbstractPlainJavaFxTest {
   @Mock
   private ThreadPoolExecutor threadPoolExecutor;
   @Mock
-  private ScheduledExecutorService scheduledExecutorService;
+  private TaskScheduler taskScheduler;
   @Mock
   private AutoCompletionHelper autoCompletionHelper;
   @Mock
   private UiService uiService;
+  @Mock
+  private ClanService clanService;
   @Mock
   private UserFilterController userFilterController;
   @Mock
@@ -99,13 +102,18 @@ public class ChannelTabControllerTest extends AbstractPlainJavaFxTest {
   private ReportingService reportingService;
   @Mock
   private EventBus eventBus;
+  @Mock
+  private CountryFlagService countryFlagService;
 
   @Before
   public void setUp() throws Exception {
-    instance = new ChannelTabController(
-        userService, chatService, platformService, preferencesService, playerService, audioService, timeService, i18n,
-        imageUploadService, urlPreviewResolver, notificationService, reportingService, uiService,
-        autoCompletionHelper, eventBus, webViewConfigurer, threadPoolExecutor, scheduledExecutorService);
+    instance = new ChannelTabController(clanService, userService, chatService,
+        platformService, preferencesService, playerService,
+        audioService, timeService, i18n, imageUploadService,
+        urlPreviewResolver, notificationService, reportingService,
+        uiService, autoCompletionHelper,
+        eventBus, webViewConfigurer, threadPoolExecutor, taskScheduler,
+        countryFlagService);
 
     when(preferencesService.getPreferences()).thenReturn(new Preferences());
     when(userService.getUsername()).thenReturn(USER_NAME);
@@ -130,7 +138,7 @@ public class ChannelTabControllerTest extends AbstractPlainJavaFxTest {
 
   @Test
   public void testGetMessageTextField() throws Exception {
-    assertNotNull(instance.getMessageTextField());
+    assertNotNull(instance.messageTextField());
   }
 
   @Test
@@ -189,7 +197,7 @@ public class ChannelTabControllerTest extends AbstractPlainJavaFxTest {
     Channel channel = new Channel(CHANNEL_NAME);
     instance.setChannel(channel);
 
-    ArgumentCaptor<MapChangeListener<String, ChatUser>> captor = ArgumentCaptor.forClass((Class) MapChangeListener.class);
+    ArgumentCaptor<MapChangeListener<String, ChatUser>> captor = ArgumentCaptor.forClass(MapChangeListener.class);
     verify(chatService).addUsersListener(anyString(), captor.capture());
 
     ChatUser chatUser = new ChatUser("junit", null);

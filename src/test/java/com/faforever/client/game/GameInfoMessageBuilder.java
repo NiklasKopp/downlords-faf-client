@@ -1,7 +1,7 @@
 package com.faforever.client.game;
 
 import com.faforever.client.remote.domain.GameInfoMessage;
-import com.faforever.client.remote.domain.GameState;
+import com.faforever.client.remote.domain.GameStatus;
 import com.faforever.client.remote.domain.VictoryCondition;
 
 import java.util.ArrayList;
@@ -22,11 +22,11 @@ public class GameInfoMessageBuilder {
 
   public GameInfoMessageBuilder defaultValues() {
     gameInfoMessage.setHost("Some host");
-    gameInfoMessage.setFeaturedMod(KnownFeaturedMod.FAF.getString());
+    gameInfoMessage.setFeaturedMod(KnownFeaturedMod.FAF.getTechnicalName());
     gameInfoMessage.setMapname("scmp_007");
     gameInfoMessage.setMaxPlayers(4);
     gameInfoMessage.setNumPlayers(1);
-    gameInfoMessage.setState(GameState.OPEN);
+    gameInfoMessage.setState(GameStatus.OPEN);
     gameInfoMessage.setTitle("Test preferences");
     gameInfoMessage.setTeams(new HashMap<>());
     gameInfoMessage.setPasswordProtected(false);
@@ -80,7 +80,7 @@ public class GameInfoMessageBuilder {
     return this;
   }
 
-  public GameInfoMessageBuilder state(GameState state) {
+  public GameInfoMessageBuilder state(GameStatus state) {
     gameInfoMessage.setState(state);
     return this;
   }

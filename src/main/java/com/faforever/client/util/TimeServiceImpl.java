@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
+import java.time.temporal.Temporal;
 import java.time.temporal.TemporalAccessor;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -32,12 +33,12 @@ public class TimeServiceImpl implements TimeService {
   }
 
   @Override
-  public String timeAgo(Instant instant) {
-    if (instant == null) {
+  public String timeAgo(Temporal temporal) {
+    if (temporal == null) {
       return "";
     }
 
-    Duration ago = Duration.between(instant, Instant.now());
+    Duration ago = Duration.between(temporal, Instant.now());
 
     if (Duration.ofMinutes(1).compareTo(ago) > 0) {
       return i18n.getQuantized("secondAgo", "secondsAgo", ago.getSeconds());
@@ -59,18 +60,18 @@ public class TimeServiceImpl implements TimeService {
   }
 
   @Override
-  public String lessThanOneDayAgo(Instant instant) {
-    if (instant == null) {
+  public String lessThanOneDayAgo(Temporal temporal) {
+    if (temporal == null) {
       return "";
     }
 
-    Duration ago = Duration.between(instant, Instant.now());
+    Duration ago = Duration.between(temporal, Instant.now());
 
     if (ago.compareTo(Duration.ofDays(1)) <= 0) {
-      return timeAgo(instant);
+      return timeAgo(temporal);
     }
 
-    return asDate(instant);
+    return asDate(temporal);
   }
 
   @Override
@@ -82,10 +83,15 @@ public class TimeServiceImpl implements TimeService {
   }
 
   @Override
-  public String asShortTime(Instant instant) {
-    return DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(getCurrentTimeLocale()).format(
-        ZonedDateTime.ofInstant(instant, TimeZone.getDefault().toZoneId())
-    );
+  public String asShortTime(Temporal temporal) {
+    return DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+        .withLocale(getCurrentTimeLocale())
+        .format(ZonedDateTime.ofInstant(Instant.from(temporal), TimeZone.getDefault().toZoneId()));
+  }
+
+  @Override
+  public String asIsoTime(Temporal temporal) {
+    return DateTimeFormatter.ISO_TIME.format(temporal);
   }
 
   private Locale getCurrentTimeLocale() {
@@ -107,9 +113,15 @@ public class TimeServiceImpl implements TimeService {
       return i18n.get("duration.seconds", duration.getSeconds());
     }
     if (Duration.ofHours(1).compareTo(duration) > 0) {
-      return i18n.get("duration.minutesSeconds", duration.toMinutes(), duration.getSeconds());
+      return i18n.get("duration.minutesSeconds", duration.toMinutes(), duration.getSeconds() % 60);
     }
 
     return i18n.get("duration.hourMinutes", duration.toMinutes() / 60, duration.toMinutes() % 60);
+  }
+
+  @Override
+  public String asHms(Duration duration) {
+    long seconds = duration.getSeconds();
+    return String.format("%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, (seconds % 60));
   }
 }

@@ -1,11 +1,11 @@
 import co.riiid.gradle.ReleaseTask
 import com.install4j.gradle.Install4jTask
+import de.undercouch.gradle.tasks.download.Download
 import groovy.json.JsonSlurper
 import groovyx.net.http.ContentType
 import groovyx.net.http.HTTPBuilder
 import groovyx.net.http.Method
 import groovyx.net.http.ParserRegistry
-import de.undercouch.gradle.tasks.download.Download
 
 buildscript {
   repositories {
@@ -23,10 +23,9 @@ buildscript {
 }
 
 plugins {
-  id "org.sonarqube" version "1.0"
   id "com.install4j.gradle" version "6.1.1"
   id "co.riiid.gradle" version "0.4.2"
-  id "de.undercouch.download" version "3.1.2"
+  id "de.undercouch.download" version "3.2.0"
 }
 
 apply plugin: 'java'
@@ -128,18 +127,14 @@ def buildAssetList() {
   }).collect({ file -> "build/install4j/${file}" })
 }
 
-sonarqube {
-  properties {
-    property "sonar.host.url", "http://home.micheljung.ch/sonar"
-    property "sonar.jdbc.url", "jdbc:mysql://home.micheljung.ch:3306/sonar"
-    property "sonar.jdbc.driverClassName", "com.mysql.jdbc.Driver"
-  }
-}
-
 jacocoTestReport {
   reports {
     xml.enabled = true
   }
+}
+
+configurations {
+  codacy
 }
 
 jar {
@@ -155,7 +150,16 @@ jar {
 distributions {
   main {
     contents {
-      from { [configurations.runtime, file('src/main/native'), jar] }
+      from {
+        [
+            configurations.runtime,
+            file('src/main/native'),
+            jar,
+            unpackIceAdapter.outputs.files,
+            downloadUnixUid.outputs.files,
+            downloadWindowsUid.outputs.files
+        ]
+      }
     }
   }
 }
@@ -201,19 +205,50 @@ task githubRelease(type: ReleaseTask, overwrite: true) {
 }
 
 task downloadIceAdapter(type: Download) {
-  mustRunAfter 'assemble'
-  src "https://github.com/FAForever/ice-adapter/releases/download/v${faf_ice_adapter_version}/faf-ice-adapter.exe"
-  dest file("${buildDir}/resources/native/faf-ice-adapter.exe")
+  src "https://github.com/FAForever/ice-adapter/releases/download/v${faf_ice_adapter_version}/faf-ice-adapter.zip"
+  dest file("${buildDir}/tmp/faf-ice-adapter.zip")
+  onlyIfNewer true
+}
+
+task unpackIceAdapter(type: Copy, dependsOn: downloadIceAdapter) {
+  group "native dependencies"
+  from zipTree(downloadIceAdapter.outputs.files.singleFile)
+  into file("${buildDir}/resources/native")
+}
+
+task downloadUnixUid(type: Download, dependsOn: unpackIceAdapter) {
+  group "native dependencies"
+  src "https://github.com/FAForever/uid/releases/download/v${faf_uid_version}/faf-uid"
+  dest file("${buildDir}/resources/native")
+  onlyIfNewer true
+}
+
+task downloadWindowsUid(type: Download, dependsOn: unpackIceAdapter) {
+  group "native dependencies"
+  src "https://github.com/FAForever/uid/releases/download/v${faf_uid_version}/faf-uid.exe"
+  dest file("${buildDir}/resources/native")
+  onlyIfNewer true
+}
+
+task downloadNativeDependencies(dependsOn: [unpackIceAdapter, downloadUnixUid, downloadWindowsUid]) {
+  group "native dependencies"
 }
 
 task wrapper(type: Wrapper) {
   gradleVersion = '2.5'
 }
 
+task sendCoverageToCodacy(type: JavaExec, dependsOn: jacocoTestReport) {
+  main = "com.codacy.CodacyCoverageReporter"
+  classpath = configurations.codacy
+  args = ["-l", "Java", "-r", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"]
+}
+
 repositories {
   mavenCentral()
   jcenter()
   maven { url "https://jitpack.io" }
+  maven { url "http://dl.bintray.com/typesafe/maven-releases" }
 }
 
 jacoco {
@@ -230,28 +265,24 @@ dependencies {
   compile("org.springframework.boot:spring-boot-starter")
   compile("org.springframework.boot:spring-boot-starter-cache")
   compile("org.springframework.boot:spring-boot-starter-logging")
+  compile("org.springframework.security.oauth:spring-security-oauth2")
+  compile("org.springframework:spring-web")
 
+  compile("com.github.FAForever:faf-java-commons:${fafCommonsVersion}")
   compile("com.google.code.gson:gson:2.3.1")
   compile("org.pircbotx:pircbotx:2.1") {
     exclude module: 'guava'
   }
   compile("com.google.guava:guava:18.0")
-  compile("ch.qos.logback:logback-classic:1.0.13")
-  compile("ch.qos.logback:logback-core:1.0.13")
-  compile("org.slf4j:slf4j-api:1.7.2")
   compile("org.apache.commons:commons-compress:1.9")
-  compile("org.apache.httpcomponents:httpclient:4.4.1")
-  compile("net.java.dev.jna:jna:4.1.0")
-  compile("net.java.dev.jna:jna-platform:4.1.0")
+  compile("net.java.dev.jna:jna:4.2.1")
+  compile("net.java.dev.jna:jna-platform:4.2.1")
   compile("org.eclipse.jgit:org.eclipse.jgit:4.5.0.201609210915-r")
   compile("org.jetbrains:annotations:13.0")
   compile("net.sf.jtidy:jtidy:r938")
   compile("com.neovisionaries:nv-i18n:1.15")
-  compile("org.slf4j:jul-to-slf4j:1.7.12")
   compile("com.rometools:rome:1.5.0")
   compile("org.jsoup:jsoup:1.8.2")
-  compile("com.google.oauth-client:google-oauth-client-java7:1.16.0-rc")
-  compile("com.google.http-client:google-http-client-gson:1.20.0")
   compile("org.apache.lucene:lucene-core:5.3.1")
   compile("org.apache.lucene:lucene-analyzers-common:5.3.1")
   compile("org.apache.lucene:lucene-suggest:5.3.1")
@@ -259,9 +290,13 @@ dependencies {
   compile("com.github.nocatch:nocatch:1.1")
   compile("org.luaj:luaj-jse:3.0.1")
   compile("commons-validator:commons-validator:1.5.1")
-  compile("com.github.micheljung:JJsonRpc:f683b55f55")
+  compile("com.github.micheljung:JJsonRpc:01a7fba5f4")
   compile("javax.inject:javax.inject:1")
+  compile("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jacksonDatatypeJsr310Version}")
   compile("org.projectlombok:lombok:${lombokVersion}")
+  compile("com.github.rutledgepaulv:q-builders:${qBuildersVersion}")
+  compile("com.github.nsp:JSkills:${jSkillsVersion}")
+  compile("com.github.jasminb:jsonapi-converter:${jsonapiConverterVersion}")
 
   testCompile 'junit:junit:4.11'
   testCompile("org.testfx:testfx-core:4.0.+") {
@@ -272,4 +307,6 @@ dependencies {
   testCompile("org.springframework.boot:spring-boot-starter-test")
 
   optional("org.springframework.boot:spring-boot-configuration-processor")
+
+  codacy("com.github.codacy:codacy-coverage-reporter:-SNAPSHOT")
 }

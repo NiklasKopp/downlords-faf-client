@@ -17,11 +17,14 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.stage.Popup;
 import javafx.stage.PopupWindow;
@@ -29,12 +32,14 @@ import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
+import lombok.SneakyThrows;
 
+import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Set;
-import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -70,7 +75,7 @@ public final class JavaFxUtil {
   }
 
   public static void makeSuggestionField(TextField textField,
-                                         Function<String, CompletionStage<Set<Label>>> itemsFactory,
+                                         Function<String, CompletableFuture<Set<Label>>> itemsFactory,
                                          Consumer<Void> onAction) {
     ListView<Label> listView = new ListView<>();
     listView.prefWidthProperty().bind(textField.widthProperty());
@@ -229,10 +234,12 @@ public final class JavaFxUtil {
    */
   public static <T> void attachListToMap(ObservableList<T> list, ObservableMap<?, T> map) {
     map.addListener((MapChangeListener<Object, T>) change -> {
-      if (change.wasRemoved()) {
-        list.remove(change.getValueRemoved());
-      } else if (change.wasAdded()) {
-        list.add(change.getValueAdded());
+      synchronized (list) {
+        if (change.wasRemoved()) {
+          list.remove(change.getValueRemoved());
+        } else if (change.wasAdded()) {
+          list.add(change.getValueAdded());
+        }
       }
     });
   }
@@ -257,10 +264,36 @@ public final class JavaFxUtil {
     }
   }
 
+  @SneakyThrows
   private static void writeImage(Image image, Path path, String format) {
-    if (path.getParent() != null) {
-      noCatch(() -> createDirectories(path.getParent()));
+    if (image == null) {
+      return;
     }
-    noCatch(() -> write(SwingFXUtils.fromFXImage(image, null), format, path.toFile()));
+    if (path.getParent() != null) {
+      createDirectories(path.getParent());
+    }
+    BufferedImage bufferedImage = SwingFXUtils.fromFXImage(image, null);
+    if (bufferedImage == null) {
+      return;
+    }
+    write(bufferedImage, format, path.toFile());
+  }
+
+  public static void setAnchors(Pane pane, double value) {
+    AnchorPane.setBottomAnchor(pane, value);
+    AnchorPane.setLeftAnchor(pane, value);
+    AnchorPane.setRightAnchor(pane, value);
+    AnchorPane.setTopAnchor(pane, value);
+  }
+
+  public static void fixScrollSpeed(ScrollPane scrollPane) {
+    Node content = scrollPane.getContent();
+    content.setOnScroll(event -> {
+      double deltaY = event.getDeltaY() * 3;
+      double height = scrollPane.getContent().getBoundsInLocal().getHeight();
+      double vvalue = scrollPane.getVvalue();
+      // deltaY/height to make the scrolling equally fast regardless of the actual height of the component
+      scrollPane.setVvalue(vvalue + -deltaY / height);
+    });
   }
 }

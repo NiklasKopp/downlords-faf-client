@@ -4,7 +4,7 @@ import com.faforever.client.fx.Controller;
 import com.faforever.client.game.PlayerStatus;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.util.RatingUtil;
-import com.google.api.client.repackaged.com.google.common.annotations.VisibleForTesting;
+import com.google.common.annotations.VisibleForTesting;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
 import javafx.scene.control.MenuButton;
@@ -47,7 +47,7 @@ public class UserFilterController implements Controller<Node> {
     this.channelTabController = channelTabController;
   }
 
-  void initialize() {
+  public void initialize() {
     clanFilterField.textProperty().addListener((observable, oldValue, newValue) -> filterUsers());
     minRatingFilterField.textProperty().addListener((observable, oldValue, newValue) -> filterUsers());
     maxRatingFilterField.textProperty().addListener((observable, oldValue, newValue) -> filterUsers());
@@ -125,19 +125,19 @@ public class UserFilterController implements Controller<Node> {
 
   public void onGameStatusPlaying(ActionEvent actionEvent) {
     playerStatusFilter = PLAYING;
-    gameStatusMenu.setText(i18n.get("chat.filter.gameStatus.playing"));
+    gameStatusMenu.setText(i18n.get("game.gameStatus.playing"));
     filterUsers();
   }
 
   public void onGameStatusLobby(ActionEvent actionEvent) {
     playerStatusFilter = LOBBYING;
-    gameStatusMenu.setText(i18n.get("chat.filter.gameStatus.lobby"));
+    gameStatusMenu.setText(i18n.get("game.gameStatus.lobby"));
     filterUsers();
   }
 
   public void onGameStatusNone(ActionEvent actionEvent) {
     playerStatusFilter = IDLE;
-    gameStatusMenu.setText(i18n.get("chat.filter.gameStatus.none"));
+    gameStatusMenu.setText(i18n.get("game.gameStatus.none"));
     filterUsers();
   }
 

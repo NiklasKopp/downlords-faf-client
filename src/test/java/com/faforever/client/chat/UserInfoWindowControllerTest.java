@@ -4,10 +4,10 @@ import com.faforever.client.achievements.AchievementDefinitionBuilder;
 import com.faforever.client.achievements.AchievementItemController;
 import com.faforever.client.achievements.AchievementService;
 import com.faforever.client.achievements.PlayerAchievementBuilder;
-import com.faforever.client.api.AchievementState;
-import com.faforever.client.api.RatingType;
+import com.faforever.client.api.dto.AchievementState;
 import com.faforever.client.domain.RatingHistoryDataPoint;
 import com.faforever.client.events.EventService;
+import com.faforever.client.game.KnownFeaturedMod;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.player.PlayerBuilder;
 import com.faforever.client.preferences.PreferencesService;
@@ -18,10 +18,10 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Arrays.asList;
@@ -41,7 +41,7 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
   private static final int PLAYER_ID = 123;
 
   private UserInfoWindowController instance;
-  private Locale locale = Locale.US;
+
   @Mock
   private CountryFlagService countryFlagService;
   @Mock
@@ -66,8 +66,8 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
     when(uiService.loadFxml("theme/achievement_item.fxml")).thenReturn(achievementItemController);
 
     when(statisticsService.getRatingHistory(any(), eq(PLAYER_ID))).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
-        new RatingHistoryDataPoint(LocalDateTime.now(), 1500, 50),
-        new RatingHistoryDataPoint(LocalDateTime.now().plusDays(1), 1500, 50)
+        new RatingHistoryDataPoint(OffsetDateTime.now(), 1500f, 50f),
+        new RatingHistoryDataPoint(OffsetDateTime.now().plus(1, ChronoUnit.DAYS), 1500f, 50f)
     )));
 
     loadFxml("theme/user_info_window.fxml", clazz -> instance);
@@ -79,16 +79,16 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
         AchievementDefinitionBuilder.create().defaultValues().get()
     )));
     when(uiService.loadFxml("theme/achievement_item.fxml")).thenReturn(achievementItemController);
-    when(achievementService.getPlayerAchievements(PLAYER_NAME)).thenReturn(CompletableFuture.completedFuture(
+    when(achievementService.getPlayerAchievements(PLAYER_ID)).thenReturn(CompletableFuture.completedFuture(
         singletonList(PlayerAchievementBuilder.create().defaultValues().get())
     ));
-    when(eventService.getPlayerEvents(PLAYER_NAME)).thenReturn(CompletableFuture.completedFuture(new HashMap<>()));
+    when(eventService.getPlayerEvents(PLAYER_ID)).thenReturn(CompletableFuture.completedFuture(new HashMap<>()));
 
     instance.setPlayer(PlayerBuilder.create(PLAYER_NAME).id(PLAYER_ID).get());
 
     verify(achievementService).getAchievementDefinitions();
-    verify(achievementService).getPlayerAchievements(PLAYER_NAME);
-    verify(eventService).getPlayerEvents(PLAYER_NAME);
+    verify(achievementService).getPlayerAchievements(PLAYER_ID);
+    verify(eventService).getPlayerEvents(PLAYER_ID);
 
     assertThat(instance.mostRecentAchievementPane.isVisible(), is(false));
   }
@@ -106,17 +106,17 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
         AchievementDefinitionBuilder.create().defaultValues().get()
     )));
     when(uiService.loadFxml("theme/achievement_item.fxml")).thenReturn(achievementItemController);
-    when(achievementService.getPlayerAchievements(PLAYER_NAME)).thenReturn(CompletableFuture.completedFuture(asList(
+    when(achievementService.getPlayerAchievements(PLAYER_ID)).thenReturn(CompletableFuture.completedFuture(asList(
         PlayerAchievementBuilder.create().defaultValues().achievementId("foo-bar").state(AchievementState.UNLOCKED).get(),
         PlayerAchievementBuilder.create().defaultValues().get()
     )));
-    when(eventService.getPlayerEvents(PLAYER_NAME)).thenReturn(CompletableFuture.completedFuture(new HashMap<>()));
+    when(eventService.getPlayerEvents(PLAYER_ID)).thenReturn(CompletableFuture.completedFuture(new HashMap<>()));
 
     instance.setPlayer(PlayerBuilder.create(PLAYER_NAME).id(PLAYER_ID).get());
 
     verify(achievementService).getAchievementDefinitions();
-    verify(achievementService).getPlayerAchievements(PLAYER_NAME);
-    verify(eventService).getPlayerEvents(PLAYER_NAME);
+    verify(achievementService).getPlayerAchievements(PLAYER_ID);
+    verify(eventService).getPlayerEvents(PLAYER_ID);
 
     assertThat(instance.mostRecentAchievementPane.isVisible(), is(true));
   }
@@ -125,13 +125,13 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
   public void testOnGlobalRatingButtonClicked() throws Exception {
     testSetPlayerInfoBean();
     instance.globalButtonClicked();
-    verify(statisticsService, times(2)).getRatingHistory(RatingType.GLOBAL, PLAYER_ID);
+    verify(statisticsService, times(2)).getRatingHistory(KnownFeaturedMod.FAF, PLAYER_ID);
   }
 
   @Test
   public void testOn1v1RatingButtonClicked() throws Exception {
     testSetPlayerInfoBean();
     instance.ladder1v1ButtonClicked();
-    verify(statisticsService).getRatingHistory(RatingType.LADDER_1V1, PLAYER_ID);
+    verify(statisticsService).getRatingHistory(KnownFeaturedMod.LADDER_1V1, PLAYER_ID);
   }
 }

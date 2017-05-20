@@ -1,17 +1,19 @@
 package com.faforever.client.game;
 
+import com.faforever.client.config.ClientProperties;
 import com.faforever.client.fa.ForgedAllianceService;
+import com.faforever.client.fa.RatingMode;
 import com.faforever.client.fa.relay.event.RehostRequestEvent;
 import com.faforever.client.fa.relay.ice.IceAdapter;
+import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.MapService;
-import com.faforever.client.mod.FeaturedModBean;
+import com.faforever.client.mod.FeaturedMod;
 import com.faforever.client.mod.ModService;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.patch.GameUpdater;
 import com.faforever.client.player.PlayerBuilder;
 import com.faforever.client.player.PlayerService;
-import com.faforever.client.preferences.ForgedAlliancePrefs;
 import com.faforever.client.preferences.Preferences;
 import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.remote.FafService;
@@ -31,26 +33,24 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
-import org.springframework.context.ApplicationContext;
 import org.springframework.util.ReflectionUtils;
 import org.testfx.util.WaitForAsyncUtils;
 
-import java.net.InetSocketAddress;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static com.faforever.client.fa.RatingMode.GLOBAL;
-import static com.faforever.client.fa.RatingMode.RANKED_1V1;
 import static com.faforever.client.game.Faction.AEON;
 import static com.faforever.client.game.Faction.CYBRAN;
 import static com.faforever.client.game.KnownFeaturedMod.LADDER_1V1;
-import static com.faforever.client.remote.domain.GameState.CLOSED;
-import static com.faforever.client.remote.domain.GameState.OPEN;
-import static com.faforever.client.remote.domain.GameState.PLAYING;
+import static com.faforever.client.remote.domain.GameStatus.CLOSED;
+import static com.faforever.client.remote.domain.GameStatus.OPEN;
+import static com.faforever.client.remote.domain.GameStatus.PLAYING;
 import static com.natpryce.hamcrest.reflection.HasAnnotationMatcher.hasAnnotation;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
@@ -82,6 +82,7 @@ public class GameServiceImplTest {
   private static final TimeUnit TIME_UNIT = TimeUnit.MILLISECONDS;
   private static final int GAME_PORT = 1234;
   private static final Integer GPG_PORT = 1234;
+  private static final int LOCAL_REPLAY_PORT = 15111;
 
   private GameServiceImpl instance;
 
@@ -96,15 +97,9 @@ public class GameServiceImplTest {
   @Mock
   private GameUpdater gameUpdater;
   @Mock
-  private Preferences preferences;
-  @Mock
-  private ForgedAlliancePrefs forgedAlliancePrefs;
-  @Mock
-  private ApplicationContext applicationContext;
-  @Mock
   private PlayerService playerService;
   @Mock
-  private ScheduledExecutorService scheduledExecutorService;
+  private Executor executor;
   @Mock
   private ReplayService replayService;
   @Mock
@@ -119,23 +114,30 @@ public class GameServiceImplTest {
   private I18n i18n;
   @Mock
   private ReportingService reportingService;
+  @Mock
+  private PlatformService platformService;
 
   @Captor
   private ArgumentCaptor<Consumer<GameInfoMessage>> gameInfoMessageListenerCaptor;
 
   @Before
   public void setUp() throws Exception {
-    instance = new GameServiceImpl(fafService, forgedAllianceService, mapService, preferencesService, gameUpdater,
-        notificationService, i18n, applicationContext, scheduledExecutorService, playerService, reportingService,
-        eventBus, iceAdapter, modService);
+    ClientProperties clientProperties = new ClientProperties();
+    clientProperties.getReplay().setLocalServerPort(LOCAL_REPLAY_PORT);
+
+    instance = new GameServiceImpl(clientProperties, fafService, forgedAllianceService, mapService,
+        preferencesService, gameUpdater, notificationService, i18n, executor, playerService,
+        reportingService, eventBus, iceAdapter, modService, platformService);
     instance.replayService = replayService;
 
+    Preferences preferences = new Preferences();
+    preferences.getForgedAlliance().setPort(GAME_PORT);
+
     when(preferencesService.getPreferences()).thenReturn(preferences);
-    when(preferences.getForgedAlliance()).thenReturn(forgedAlliancePrefs);
-    when(forgedAlliancePrefs.getPort()).thenReturn(GAME_PORT);
     when(fafService.connectionStateProperty()).thenReturn(new SimpleObjectProperty<>());
     when(replayService.startReplayServer(anyInt())).thenReturn(CompletableFuture.completedFuture(null));
     when(iceAdapter.start()).thenReturn(CompletableFuture.completedFuture(GPG_PORT));
+    when(playerService.getCurrentPlayer()).thenReturn(Optional.of(PlayerBuilder.create("JUnit").defaultValues().get()));
 
     doAnswer(invocation -> {
       try {
@@ -144,7 +146,7 @@ public class GameServiceImplTest {
         e.printStackTrace();
       }
       return null;
-    }).when(scheduledExecutorService).execute(any());
+    }).when(executor).execute(any());
 
     instance.postConstruct();
 
@@ -192,7 +194,7 @@ public class GameServiceImplTest {
     gameLaunchMessage.setArgs(asList("/foo bar", "/bar foo"));
 
     when(forgedAllianceService.startGame(
-        gameLaunchMessage.getUid(), null, asList("/foo", "bar", "/bar", "foo"), GLOBAL, GPG_PORT, false)
+        gameLaunchMessage.getUid(), null, asList("/foo", "bar", "/bar", "foo"), GLOBAL, GPG_PORT, LOCAL_REPLAY_PORT, false)
     ).thenReturn(process);
     when(gameUpdater.update(any(), any(), any(), any())).thenReturn(completedFuture(null));
     when(fafService.requestHostGame(newGameInfo)).thenReturn(completedFuture(gameLaunchMessage));
@@ -217,7 +219,7 @@ public class GameServiceImplTest {
     gameTerminatedLatch.await(TIMEOUT, TIME_UNIT);
     verify(forgedAllianceService).startGame(
         gameLaunchMessage.getUid(), null, asList("/foo", "bar", "/bar", "foo"), GLOBAL,
-        GPG_PORT, false);
+        GPG_PORT, LOCAL_REPLAY_PORT, false);
     verify(replayService).startReplayServer(gameLaunchMessage.getUid());
   }
 
@@ -277,7 +279,7 @@ public class GameServiceImplTest {
   public void testOnGameInfoMessageSetsCurrentGameIfUserIsInAndStatusOpen() throws Exception {
     assertThat(instance.getCurrentGame(), nullValue());
 
-    when(playerService.getCurrentPlayer()).thenReturn(PlayerBuilder.create("PlayerName").get());
+    when(playerService.getCurrentPlayer()).thenReturn(Optional.ofNullable(PlayerBuilder.create("PlayerName").get()));
 
     GameInfoMessage gameInfoMessage = GameInfoMessageBuilder.create(1234).defaultValues()
         .state(OPEN)
@@ -292,7 +294,7 @@ public class GameServiceImplTest {
   public void testOnGameInfoMessageDoesntSetCurrentGameIfUserIsInAndStatusNotOpen() throws Exception {
     assertThat(instance.getCurrentGame(), nullValue());
 
-    when(playerService.getCurrentPlayer()).thenReturn(PlayerBuilder.create("PlayerName").get());
+    when(playerService.getCurrentPlayer()).thenReturn(Optional.ofNullable(PlayerBuilder.create("PlayerName").get()));
 
     GameInfoMessage gameInfoMessage = GameInfoMessageBuilder.create(1234).defaultValues()
         .state(PLAYING)
@@ -306,7 +308,7 @@ public class GameServiceImplTest {
   public void testOnGameInfoMessageDoesntSetCurrentGameIfUserDoesntMatch() throws Exception {
     assertThat(instance.getCurrentGame(), nullValue());
 
-    when(playerService.getCurrentPlayer()).thenReturn(PlayerBuilder.create("PlayerName").get());
+    when(playerService.getCurrentPlayer()).thenReturn(Optional.ofNullable(PlayerBuilder.create("PlayerName").get()));
 
     GameInfoMessage gameInfoMessage = GameInfoMessageBuilder.create(1234).defaultValues().addTeamMember("1", "Other").get();
     gameInfoMessageListenerCaptor.getValue().accept(gameInfoMessage);
@@ -338,7 +340,7 @@ public class GameServiceImplTest {
   public void testOnGameInfoRemove() {
     assertThat(instance.getGames(), empty());
 
-    when(playerService.getCurrentPlayer()).thenReturn(PlayerBuilder.create("PlayerName").get());
+    when(playerService.getCurrentPlayer()).thenReturn(Optional.ofNullable(PlayerBuilder.create("PlayerName").get()));
 
     GameInfoMessage gameInfoMessage = GameInfoMessageBuilder.create(1).defaultValues().title("Game 1").get();
     gameInfoMessageListenerCaptor.getValue().accept(gameInfoMessage);
@@ -351,40 +353,40 @@ public class GameServiceImplTest {
   }
 
   @Test
-  public void testStartSearchRanked1v1() throws Exception {
+  public void testStartSearchLadder1v1() throws Exception {
     GameLaunchMessage gameLaunchMessage = new GameLaunchMessage();
     gameLaunchMessage.setMod("ladder1v1");
     gameLaunchMessage.setUid(123);
     gameLaunchMessage.setArgs(emptyList());
     gameLaunchMessage.setMapname("scmp_037");
 
-    FeaturedModBean featuredMod = FeaturedModBeanBuilder.create().defaultValues().get();
+    FeaturedMod featuredMod = FeaturedModBeanBuilder.create().defaultValues().get();
 
-    when(fafService.startSearchRanked1v1(CYBRAN, GAME_PORT)).thenReturn(CompletableFuture.completedFuture(gameLaunchMessage));
+    when(fafService.startSearchLadder1v1(CYBRAN, GAME_PORT)).thenReturn(CompletableFuture.completedFuture(gameLaunchMessage));
     when(gameUpdater.update(featuredMod, null, Collections.emptyMap(), Collections.emptySet())).thenReturn(CompletableFuture.completedFuture(null));
     when(mapService.isInstalled("scmp_037")).thenReturn(false);
     when(mapService.download("scmp_037")).thenReturn(CompletableFuture.completedFuture(null));
-    when(modService.getFeaturedMod(LADDER_1V1.getString())).thenReturn(CompletableFuture.completedFuture(featuredMod));
+    when(modService.getFeaturedMod(LADDER_1V1.getTechnicalName())).thenReturn(CompletableFuture.completedFuture(featuredMod));
 
-    CompletableFuture<Void> future = instance.startSearchRanked1v1(CYBRAN).toCompletableFuture();
+    CompletableFuture<Void> future = instance.startSearchLadder1v1(CYBRAN).toCompletableFuture();
 
-    verify(fafService).startSearchRanked1v1(CYBRAN, GAME_PORT);
+    verify(fafService).startSearchLadder1v1(CYBRAN, GAME_PORT);
     verify(mapService).download("scmp_037");
     verify(replayService).startReplayServer(123);
-    verify(forgedAllianceService, timeout(100)).startGame(eq(123), eq(CYBRAN), eq(asList("/team", "1", "/players", "2")), eq(RANKED_1V1), anyInt(), eq(false));
+    verify(forgedAllianceService, timeout(100))
+        .startGame(eq(123), eq(CYBRAN), eq(asList("/team", "1", "/players", "2")), eq(RatingMode.LADDER_1V1), anyInt(), eq(LOCAL_REPLAY_PORT), eq(false));
     assertThat(future.get(TIMEOUT, TIME_UNIT), is(nullValue()));
   }
 
   @Test
-  public void testStartSearchRanked1v1GameRunningDoesNothing() throws Exception {
+  public void testStartSearchLadder1v1GameRunningDoesNothing() throws Exception {
     Process process = mock(Process.class);
     when(process.isAlive()).thenReturn(true);
 
     NewGameInfo newGameInfo = NewGameInfoBuilder.create().defaultValues().get();
     GameLaunchMessage gameLaunchMessage = GameLaunchMessageBuilder.create().defaultValues().get();
-    InetSocketAddress externalSocketAddress = new InetSocketAddress(123);
 
-    when(forgedAllianceService.startGame(anyInt(), any(), any(), any(), anyInt(), eq(false))).thenReturn(process);
+    when(forgedAllianceService.startGame(anyInt(), any(), any(), any(), anyInt(), eq(LOCAL_REPLAY_PORT), eq(false))).thenReturn(process);
     when(gameUpdater.update(any(), any(), any(), any())).thenReturn(completedFuture(null));
     when(fafService.requestHostGame(newGameInfo)).thenReturn(completedFuture(gameLaunchMessage));
     when(mapService.download(newGameInfo.getMap())).thenReturn(CompletableFuture.completedFuture(null));
@@ -399,23 +401,23 @@ public class GameServiceImplTest {
     instance.hostGame(newGameInfo);
     gameRunningLatch.await(TIMEOUT, TIME_UNIT);
 
-    instance.startSearchRanked1v1(AEON);
+    instance.startSearchLadder1v1(AEON);
 
     assertThat(instance.searching1v1Property().get(), is(false));
   }
 
   @Test
-  public void testStopSearchRanked1v1() throws Exception {
+  public void testStopSearchLadder1v1() throws Exception {
     instance.searching1v1Property().set(true);
-    instance.stopSearchRanked1v1();
+    instance.stopSearchLadder1v1();
     assertThat(instance.searching1v1Property().get(), is(false));
     verify(fafService).stopSearchingRanked();
   }
 
   @Test
-  public void testStopSearchRanked1v1NotSearching() throws Exception {
+  public void testStopSearchLadder1v1NotSearching() throws Exception {
     instance.searching1v1Property().set(false);
-    instance.stopSearchRanked1v1();
+    instance.stopSearchLadder1v1();
     assertThat(instance.searching1v1Property().get(), is(false));
     verify(fafService, never()).stopSearchingRanked();
   }
@@ -442,7 +444,7 @@ public class GameServiceImplTest {
 
     instance.onRehostRequest(new RehostRequestEvent());
 
-    verify(forgedAllianceService).startGame(anyInt(), eq(null), anyListOf(String.class), eq(GLOBAL), anyInt(), eq(true));
+    verify(forgedAllianceService).startGame(anyInt(), eq(null), anyListOf(String.class), eq(GLOBAL), anyInt(), eq(LOCAL_REPLAY_PORT), eq(true));
   }
 
   @Test
@@ -454,6 +456,6 @@ public class GameServiceImplTest {
 
     instance.onRehostRequest(new RehostRequestEvent());
 
-    verify(forgedAllianceService, never()).startGame(anyInt(), any(), any(), any(), anyInt(), anyBoolean());
+    verify(forgedAllianceService, never()).startGame(anyInt(), any(), any(), any(), anyInt(), eq(LOCAL_REPLAY_PORT), anyBoolean());
   }
 }
