@@ -3,6 +3,7 @@ package com.faforever.client.notification;
 import com.faforever.client.fx.Controller;
 import com.faforever.client.notification.Action.ActionCallback;
 import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.ui.StageHolder;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
@@ -16,6 +17,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.shape.Rectangle;
+import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
@@ -112,6 +114,11 @@ public class TransientNotificationController implements Controller<Node> {
     if (event.getButton().equals(MouseButton.SECONDARY)) {
       dismiss();
     } else {
+      final Stage stage = StageHolder.getStage();
+      if (!stage.isFocused()) {
+        stage.setIconified(false);
+        stage.requestFocus();
+      }
       action.call(event);
     }
   }
