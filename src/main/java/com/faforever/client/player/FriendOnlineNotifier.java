@@ -54,7 +54,7 @@ public class FriendOnlineNotifier {
               i18n.get("friend.nowOnlineNotification.title", username),
               i18n.get("friend.nowOnlineNotification.action"),
               IdenticonUtil.createIdenticon(player.getId()),
-              event1 -> {
+              newChatEvent -> {
                 eventBus.post(new NavigateEvent(NavigationItem.CHAT));
                 eventBus.post(new InitiatePrivateChatEvent(username));
               }

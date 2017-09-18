@@ -38,6 +38,7 @@ import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -72,6 +73,92 @@ public final class JavaFxUtil {
 
   private JavaFxUtil() {
     throw new AssertionError("Not instantiatable");
+  }
+
+  public static Screen getScreenForRectangle(final Rectangle2D rect) {
+    final List<Screen> screens = Screen.getScreens();
+
+    final double rectX0 = rect.getMinX();
+    final double rectX1 = rect.getMaxX();
+    final double rectY0 = rect.getMinY();
+    final double rectY1 = rect.getMaxY();
+
+    Screen selectedScreen;
+
+    selectedScreen = null;
+    double maxIntersection = 0;
+    for (final Screen screen : screens) {
+      final Rectangle2D screenBounds = screen.getBounds();
+      final double intersection =
+          getIntersectionLength(rectX0, rectX1,
+              screenBounds.getMinX(),
+              screenBounds.getMaxX())
+              * getIntersectionLength(rectY0, rectY1,
+              screenBounds.getMinY(),
+              screenBounds.getMaxY());
+
+      if (maxIntersection < intersection) {
+        maxIntersection = intersection;
+        selectedScreen = screen;
+      }
+    }
+
+    if (selectedScreen != null) {
+      return selectedScreen;
+    }
+
+    selectedScreen = Screen.getPrimary();
+    double minDistance = Double.MAX_VALUE;
+    for (final Screen screen : screens) {
+      final Rectangle2D screenBounds = screen.getBounds();
+      final double dx = getOuterDistance(rectX0, rectX1,
+          screenBounds.getMinX(),
+          screenBounds.getMaxX());
+      final double dy = getOuterDistance(rectY0, rectY1,
+          screenBounds.getMinY(),
+          screenBounds.getMaxY());
+      final double distance = dx * dx + dy * dy;
+
+      if (minDistance > distance) {
+        minDistance = distance;
+        selectedScreen = screen;
+      }
+    }
+
+    return selectedScreen;
+  }
+
+  private static double getIntersectionLength(
+      final double a0, final double a1,
+      final double b0, final double b1) {
+    // (a0 <= a1) && (b0 <= b1)
+    return (a0 <= b0) ? getIntersectionLengthImpl(b0, b1, a1)
+        : getIntersectionLengthImpl(a0, a1, b1);
+  }
+
+  private static double getIntersectionLengthImpl(
+      final double v0, final double v1, final double v) {
+    // (v0 <= v1)
+    if (v <= v0) {
+      return 0;
+    }
+
+    return (v <= v1) ? v - v0 : v1 - v0;
+  }
+
+  private static double getOuterDistance(
+      final double a0, final double a1,
+      final double b0, final double b1) {
+    // (a0 <= a1) && (b0 <= b1)
+    if (a1 <= b0) {
+      return b0 - a1;
+    }
+
+    if (b1 <= a0) {
+      return b1 - a0;
+    }
+
+    return 0;
   }
 
   public static void makeSuggestionField(TextField textField,

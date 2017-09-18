@@ -19,6 +19,7 @@ import javafx.collections.ObservableList;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.hamcrest.Matchers;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
