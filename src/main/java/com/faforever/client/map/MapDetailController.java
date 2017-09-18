@@ -28,6 +28,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.VBox;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
@@ -67,6 +68,7 @@ public class MapDetailController implements Controller<Node> {
   public Label dateLabel;
   public Label timeLabel;
   public ReviewsController reviewsController;
+  public VBox loadingContainer;
 
   private MapBean map;
   private ListChangeListener<MapBean> installStatusChangeListener;
@@ -92,6 +94,7 @@ public class MapDetailController implements Controller<Node> {
     progressBar.visibleProperty().bind(uninstallButton.visibleProperty().not().and(installButton.visibleProperty().not()));
     progressLabel.managedProperty().bind(progressLabel.visibleProperty());
     progressLabel.visibleProperty().bind(progressBar.visibleProperty());
+    loadingContainer.visibleProperty().bind(progressBar.visibleProperty());
 
     reviewsController.setCanWriteReview(false);
 
@@ -245,11 +248,12 @@ public class MapDetailController implements Controller<Node> {
         });
   }
 
-  public void onDimmerClicked() {
+  public void onDimmerClicked(MouseEvent event) {
     onCloseButtonClicked();
   }
 
   public void onContentPaneClicked(MouseEvent event) {
     event.consume();
   }
+
 }
